@@ -1,0 +1,18 @@
+version: 3
+projects:
+- name: infra-production
+  dir: .
+  autoplan:
+    enabled: true
+    when_modified: ["*.tf", "*.tfvars", "atlantis.yaml"]
+  terraform_version: v1.5.0
+  apply_requirements: [approved] # apply는 승인이 필요하지만, plan은 자동으로 실행됨
+workflows:
+  default:
+    plan:
+      steps:
+      - init
+      - plan
+    apply:
+      steps:
+      - apply

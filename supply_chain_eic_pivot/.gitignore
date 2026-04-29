@@ -1,0 +1,19 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl
+
+# Sensitive Local Files
+*.pem
+*.key
+credentials.txt
+!assets/gitlab_credentials.txt # 시나리오용 파일은 예외로 포함
+
+# MacOS
+.DS_Store
+
+# Logs
+*.log
