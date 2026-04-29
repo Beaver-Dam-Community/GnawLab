@@ -1,0 +1,126 @@
+# ===================
+# AI Tools
+# ===================
+
+# Claude Code
+.claude/
+CLAUDE.md
+memory.md
+
+# Cursor
+.cursor/
+.cursorignore
+.cursorrules
+
+# Aider
+.aider*
+.aider.chat.history.md
+
+# OpenAI Codex
+.codex/
+codex.md
+
+# Google Gemini CLI
+.gemini/
+
+# Open Code
+.opencode/
+
+# OpenClaw
+.openclaw/
+
+# Hermes Agent
+.hermes/
+
+# Windsurf
+.windsurf/
+.windsurfrules
+
+# Other AI
+.ai/
+.llm/
+
+# ===================
+# Terraform
+# ===================
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# ===================
+# Python
+# ===================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# ===================
+# Node.js
+# ===================
+node_modules/
+npm-debug.log*
+yarn-error.log*
+yarn-debug.log*
+.pnpm-debug.log*
+
+# ===================
+# Docker
+# ===================
+.docker/
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# ===================
+# Environment & Secrets
+# ===================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+credentials.json
+secrets.json
+*_credentials.json
+
+# ===================
+# OS
+# ===================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ===================
+# Logs & Cache
+# ===================
+*.log
+logs/
+.cache/
+tmp/
+temp/
