@@ -2,7 +2,7 @@
 
 ## Exploitation Route
 
-![Prime Financial Customer Portal](./assets/legacy-bridge-initial-screen.png)
+![Exploitation Route](./assets/legacy-bridge-exploitation-route.png)
 
 ## Summary
 
@@ -15,6 +15,10 @@
 ## Detailed Walkthrough
 
 ### Step 1: IDOR Enumeration
+
+When you visit the gateway URL, the portal looks like this:
+
+![Prime Financial Customer Portal](./assets/legacy-bridge-initial-screen.png)
 
 Set gateway URL as environment variable:
 
@@ -52,7 +56,7 @@ curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/la
 ```
 
 Extract role name from `backend_response` field:
-legacy-bridge-Shadow-API-Role-<SUFFIX>
+`legacy-bridge-Shadow-API-Role-<SUFFIX>`
 
 ---
 

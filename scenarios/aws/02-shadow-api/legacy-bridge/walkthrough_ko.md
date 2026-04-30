@@ -2,7 +2,7 @@
 
 ## Exploitation Route
 
-![Prime Financial Customer Portal](./assets/legacy-bridge-initial-screen.png)
+![Exploitation Route](./assets/legacy-bridge-exploitation-route-ko.png)
 
 ## Summary
 
@@ -15,6 +15,10 @@
 ## Detailed Walkthrough
 
 ### Step 1: IDOR 열거
+
+게이트웨이 URL에 접속하면 다음과 같은 포털이 나타납니다:
+
+![Prime Financial Customer Portal](./assets/legacy-bridge-initial-screen.png)
 
 게이트웨이 URL을 환경변수로 설정합니다:
 
