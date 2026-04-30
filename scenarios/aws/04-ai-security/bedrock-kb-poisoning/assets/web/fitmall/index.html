@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FitMall · Activewear</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111827'/%3E%3Ctext x='32' y='42' font-family='-apple-system,Segoe UI,sans-serif' font-size='28' font-weight='800' fill='%23fde68a' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #fafaf7; --ink: #1f2937; --dim: #6b7280;
+      --line: #e5e7eb; --accent: #111827; --hi: #fde68a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin:0; padding:0; height:100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Noto Sans KR", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+    a { color: var(--ink); }
+    .topnav { display: flex; align-items: center; justify-content: space-between; padding: 18px 28px; border-bottom: 1px solid var(--line); background: #fff; position: sticky; top: 0; z-index: 5; }
+    .brand { font-weight: 800; letter-spacing: 0.5px; font-size: 20px; }
+    .links a { margin-left: 22px; font-size: 14px; color: var(--dim); text-decoration: none; }
+    .links a:hover { color: var(--ink); }
+    .hero { max-width: 1100px; margin: 0 auto; padding: 64px 28px 36px; }
+    .hero h1 { font-size: 46px; line-height: 1.1; margin: 0 0 18px; letter-spacing: -0.5px; }
+    .hero p  { font-size: 17px; color: var(--dim); max-width: 620px; }
+    .grid { max-width: 1100px; margin: 0 auto; padding: 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    .card .ph { aspect-ratio: 1 / 1; background: linear-gradient(135deg, #f3f4f6, #e5e7eb); display: grid; place-items: center; color: var(--dim); font-size: 13px; }
+    .card .b { padding: 14px; }
+    .card h4 { margin: 0 0 4px; font-size: 14px; }
+    .card .price { color: var(--ink); font-weight: 700; }
+    .footer { color: var(--dim); font-size: 12px; padding: 32px; text-align: center; }
+    .footer .small { font-size: 11px; opacity: 0.8; }
+
+    /* chat bubble */
+    .cb-launch {
+      position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px;
+      border-radius: 50%; background: var(--accent); color: #fff;
+      display: grid; place-items: center; cursor: pointer;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.18); z-index: 10;
+      font-size: 24px;
+    }
+    .cb-window {
+      position: fixed; bottom: 88px; right: 20px; width: 360px; height: 520px;
+      background: #fff; border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+      display: none; flex-direction: column; overflow: hidden; z-index: 11;
+    }
+    .cb-window.open { display: flex; }
+    .cb-head { background: var(--accent); color: #fff; padding: 12px 16px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+    .cb-head .x { cursor: pointer; opacity: 0.8; }
+    .cb-stream { flex: 1; overflow-y: auto; padding: 14px; background: #fafaf7; }
+    .cb-msg { max-width: 85%; padding: 8px 12px; border-radius: 10px; margin-bottom: 8px; font-size: 14px; line-height: 1.5; }
+    .cb-msg.user { background: var(--hi); margin-left: auto; }
+    .cb-msg.bot  { background: #fff; border: 1px solid var(--line); }
+    .cb-msg.bot a { color: #1d4ed8; word-break: break-all; }
+    .cb-input { display: flex; border-top: 1px solid var(--line); }
+    .cb-input input { flex: 1; border: 0; padding: 12px 14px; font-size: 14px; outline: none; }
+    .cb-input button { background: var(--accent); color: #fff; border: 0; padding: 0 16px; cursor: pointer; }
+    .cb-note { font-size: 11px; color: var(--dim); padding: 8px 14px; background: #fff; border-top: 1px solid var(--line); }
+  </style>
+</head>
+<body>
+  <nav class="topnav">
+    <div class="brand">FitMall</div>
+    <div class="links">
+      <a href="#">Tops</a>
+      <a href="#">Bottoms</a>
+      <a href="#">Outerwear</a>
+      <a href="#">Sale</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <h1>Move better.<br/>Stay light.</h1>
+    <p>Korean activewear, designed for everyday training. New season drops weekly.</p>
+  </section>
+
+  <section class="grid">
+    <div class="card"><div class="ph">Mesh Tank — Black</div><div class="b"><h4>Mesh Tank</h4><div class="price">KRW 39,000</div></div></div>
+    <div class="card"><div class="ph">Run Shorts — Stone</div><div class="b"><h4>Run Shorts</h4><div class="price">KRW 49,000</div></div></div>
+    <div class="card"><div class="ph">Compression Tee — Olive</div><div class="b"><h4>Compression Tee</h4><div class="price">KRW 55,000</div></div></div>
+    <div class="card"><div class="ph">Training Jacket — Charcoal</div><div class="b"><h4>Training Jacket</h4><div class="price">KRW 119,000</div></div></div>
+    <div class="card"><div class="ph">Performance Leggings — Navy</div><div class="b"><h4>Performance Leggings</h4><div class="price">KRW 79,000</div></div></div>
+    <div class="card"><div class="ph">Lightweight Cap — Sand</div><div class="b"><h4>Lightweight Cap</h4><div class="price">KRW 29,000</div></div></div>
+  </section>
+
+  <footer class="footer">
+    FitMall · activewear &nbsp;·&nbsp; CS chat powered by TokTok-Support<br/>
+    <span class="small">All product imagery is illustrative for the lab.</span>
+  </footer>
+
+  <!-- Chat bubble -->
+  <div class="cb-launch" id="cb-launch" title="Chat with us">💬</div>
+  <div class="cb-window" id="cb-window">
+    <div class="cb-head">
+      <span>FitMall CS</span>
+      <span class="x" id="cb-close">×</span>
+    </div>
+    <div class="cb-stream" id="cb-stream">
+      <div class="cb-msg bot">Hi! I can help with refunds, exchanges, shipping, and sizing. What can I do for you?</div>
+    </div>
+    <div class="cb-input">
+      <input id="cb-input" type="text" placeholder="Ask anything…" />
+      <button id="cb-send">Send</button>
+    </div>
+    <div class="cb-note">
+      Customer chat is anonymous. Ordering questions may require your order number.
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script>
+    /* Customer-facing chat widget. Anonymous (no login). The /chat
+       backend in this lab requires a Cognito JWT, so the widget displays
+       a friendly notice if the public anonymous endpoint is not enabled.
+       The realistic behaviour for a production deployment would be to
+       have a separate /chat-public endpoint with a service-issued JWT.
+       The lab keeps a single /chat endpoint for clarity. */
+    (function() {
+      const $ = (s) => document.querySelector(s);
+      $("#cb-launch").addEventListener("click", () => $("#cb-window").classList.add("open"));
+      $("#cb-close").addEventListener("click", () => $("#cb-window").classList.remove("open"));
+
+      $("#cb-send").addEventListener("click", async () => {
+        const input = $("#cb-input");
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = "";
+        const stream = $("#cb-stream");
+        const u = document.createElement("div");
+        u.className = "cb-msg user"; u.textContent = text;
+        stream.appendChild(u);
+        const b = document.createElement("div");
+        b.className = "cb-msg bot";
+        b.textContent = "For demo simplicity this storefront's widget is a UI mockup. Use the TokTok-Support console (Chat QA / Preview) to interact with the chatbot end-to-end.";
+        stream.appendChild(b);
+        stream.scrollTop = stream.scrollHeight;
+      });
+    })();
+  </script>
+</body>
+</html>
