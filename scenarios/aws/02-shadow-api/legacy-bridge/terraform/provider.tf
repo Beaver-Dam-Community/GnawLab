@@ -24,11 +24,13 @@ provider "aws" {
   }
 }
 
-resource "random_id" "scenario_suffix" {
-  byte_length = 4
+resource "random_string" "scenario_suffix" {
+  length  = 8
+  special = false
+  upper   = false
 }
 
 locals {
-  suffix = random_id.scenario_suffix.hex
+  suffix = random_string.scenario_suffix.result
   name   = var.scenario_name
 }

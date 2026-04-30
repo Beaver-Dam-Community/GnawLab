@@ -1,9 +1,9 @@
 resource "aws_s3_bucket" "prime_pii_vault_s3" {
-  bucket        = "prime-pii-vault-${local.suffix}"
+  bucket        = "${local.name}-pii-vault-${local.suffix}"
   force_destroy = true
 
   tags = {
-    Name        = "prime-pii-vault-${local.suffix}"
+    Name        = "${local.name}-pii-vault-${local.suffix}"
     DataClass   = "pii"
     Sensitivity = "high"
   }
