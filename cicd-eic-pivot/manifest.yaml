@@ -1,0 +1,69 @@
+name: supply_chain_eic_pivot
+category: aws
+difficulty: Hard
+size: Medium
+version: "1.0"
+
+tags:
+  - ci-cd
+  - pipeline-poisoning
+  - imds
+  - iam-privilege-escalation
+  - ec2-instance-connect
+  - lateral-movement
+  - terraform
+
+start_identity: GitLab Developer Account
+credentials_provided:
+  - assets/gitlab_credentials.txt
+
+goal: Retrieve the flag from /home/ubuntu/flag.txt on the Target Server in the private subnet.
+
+resources:
+  application_vcs:
+    - type: GitLab Account
+      name: "000_ops"
+    - type: Repository
+      name: infra-repo
+    - type: CI/CD Tool
+      name: Atlantis
+    - type: Config File
+      name: atlantis.yaml
+  network:
+    - type: VPC
+      subnets:
+        - Public
+        - Private
+  compute:
+    - type: EC2
+      name: GitLab Server
+      subnet: Public
+      instance_type: t3.medium
+    - type: EC2
+      name: Atlantis Runner
+      subnet: Public
+      instance_type: t3.micro
+    - type: EC2
+      name: Bastion Host
+      subnet: Public
+      instance_type: t3.micro
+    - type: EC2
+      name: Target Server
+      subnet: Private
+      instance_type: t3.micro
+  iam:
+    - type: IAM Role
+      name: atlantis-role
+      note: Overprivileged — grants ec2-instance-connect:SendSSHPublicKey
+    - type: IAM Role
+      name: target-role
+    - type: IAM Instance Profile
+      name: atlantis-profile
+    - type: IAM Instance Profile
+      name: target-profile
+
+real_world_references:
+  - title: "Terraform CI/CD Supply Chain Attacks"
+    url: "https://www.praetorian.com/blog/terraform-cloud-security-dangers/"
+  - title: "EC2 Instance Connect Abuse for Lateral Movement"
+    url: "https://permiso.io/blog/lucr-3-scattered-spider-getting-saas-y-in-the-cloud"
