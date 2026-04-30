@@ -1,5 +1,5 @@
 resource "aws_iam_role" "gitlab_role" {
-  name = "${var.scenario_name}-gitlab-role-${var.beaver_id}"
+  name = local.gitlab_role_name
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -12,13 +12,11 @@ resource "aws_iam_role" "gitlab_role" {
     ]
   })
 
-  tags = {
-    Name = "${var.scenario_name}-gitlab-role-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.gitlab_role_name })
 }
 
 resource "aws_iam_role_policy" "gitlab_ssm_policy" {
-  name = "${var.scenario_name}-gitlab-ssm-${var.beaver_id}"
+  name = "${local.scenario_name}-gitlab-ssm-${local.scenario_id}"
   role = aws_iam_role.gitlab_role.id
 
   policy = jsonencode({
@@ -34,12 +32,12 @@ resource "aws_iam_role_policy" "gitlab_ssm_policy" {
 }
 
 resource "aws_iam_instance_profile" "gitlab_profile" {
-  name = "${var.scenario_name}-gitlab-profile-${var.beaver_id}"
+  name = "${local.scenario_name}-gitlab-profile-${local.scenario_id}"
   role = aws_iam_role.gitlab_role.name
 }
 
 resource "aws_iam_role" "atlantis_role" {
-  name = "${var.scenario_name}-atlantis-role-${var.beaver_id}"
+  name = local.atlantis_role_name
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -52,13 +50,11 @@ resource "aws_iam_role" "atlantis_role" {
     ]
   })
 
-  tags = {
-    Name = "${var.scenario_name}-atlantis-role-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.atlantis_role_name })
 }
 
 resource "aws_iam_role_policy" "atlantis_policy" {
-  name = "${var.scenario_name}-atlantis-policy-${var.beaver_id}"
+  name = "${local.scenario_name}-atlantis-policy-${local.scenario_id}"
   role = aws_iam_role.atlantis_role.id
 
   policy = jsonencode({
@@ -91,12 +87,12 @@ resource "aws_iam_role_policy" "atlantis_policy" {
 }
 
 resource "aws_iam_instance_profile" "atlantis_profile" {
-  name = "${var.scenario_name}-atlantis-profile-${var.beaver_id}"
+  name = "${local.scenario_name}-atlantis-profile-${local.scenario_id}"
   role = aws_iam_role.atlantis_role.name
 }
 
 resource "aws_iam_role" "target_role" {
-  name = "${var.scenario_name}-target-role-${var.beaver_id}"
+  name = local.target_role_name
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -109,12 +105,10 @@ resource "aws_iam_role" "target_role" {
     ]
   })
 
-  tags = {
-    Name = "${var.scenario_name}-target-role-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.target_role_name })
 }
 
 resource "aws_iam_instance_profile" "target_profile" {
-  name = "${var.scenario_name}-target-profile-${var.beaver_id}"
+  name = "${local.scenario_name}-target-profile-${local.scenario_id}"
   role = aws_iam_role.target_role.name
 }

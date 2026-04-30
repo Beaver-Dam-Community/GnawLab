@@ -1,0 +1,181 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1777560876415,
+  "projectRoot": "/Users/cityll/CloudBeaver",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "supply_chain_eic_pivot": {
+      "path": "supply_chain_eic_pivot",
+      "purpose": null,
+      "fileCount": 8,
+      "lastAccessed": 1777560876399,
+      "keyFiles": [
+        "README.md",
+        "architecture.png",
+        "cleanup.md",
+        "exploitation_route.png",
+        "manifest.yaml"
+      ]
+    },
+    "supply_chain_eic_pivot/assets": {
+      "path": "supply_chain_eic_pivot/assets",
+      "purpose": "Static assets",
+      "fileCount": 1,
+      "lastAccessed": 1777560876400,
+      "keyFiles": [
+        "gitlab_credentials.txt"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "supply_chain_eic_pivot/terraform/scripts/setup-atlantis.sh.tpl",
+      "accessCount": 8,
+      "lastAccessed": 1777579371384,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/walkthrough.md",
+      "accessCount": 7,
+      "lastAccessed": 1777591334901,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/terraform/compute.tf",
+      "accessCount": 5,
+      "lastAccessed": 1777580931279,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/README.md",
+      "accessCount": 5,
+      "lastAccessed": 1777592447584,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/setup.md",
+      "accessCount": 5,
+      "lastAccessed": 1777592448523,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/cleanup.md",
+      "accessCount": 5,
+      "lastAccessed": 1777592449510,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/terraform/scripts/setup-gitlab.sh.tpl",
+      "accessCount": 3,
+      "lastAccessed": 1777563903629,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/terraform/outputs.tf",
+      "accessCount": 3,
+      "lastAccessed": 1777573095260,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/terraform/iam.tf",
+      "accessCount": 3,
+      "lastAccessed": 1777579596610,
+      "type": "file"
+    },
+    {
+      "path": "cicd-eic-pivot/pr_body.md",
+      "accessCount": 3,
+      "lastAccessed": 1777592477826,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/assets/infra-repo/main.tf",
+      "accessCount": 2,
+      "lastAccessed": 1777579598775,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/terraform/variables.tf",
+      "accessCount": 2,
+      "lastAccessed": 1777580922933,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/attack_path.md",
+      "accessCount": 2,
+      "lastAccessed": 1777592450031,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/terraform/secrets.tf",
+      "accessCount": 1,
+      "lastAccessed": 1777579597356,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/assets/infra-repo/atlantis.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1777579598526,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/assets/infra-repo/variables.tf",
+      "accessCount": 1,
+      "lastAccessed": 1777579631877,
+      "type": "file"
+    },
+    {
+      "path": "supply_chain_eic_pivot/assets/gitlab_credentials.txt",
+      "accessCount": 1,
+      "lastAccessed": 1777579666257,
+      "type": "file"
+    },
+    {
+      "path": "cicd-eic-pivot/terraform/variables.tf",
+      "accessCount": 1,
+      "lastAccessed": 1777592519311,
+      "type": "file"
+    },
+    {
+      "path": "cicd-eic-pivot/terraform/secrets.tf",
+      "accessCount": 1,
+      "lastAccessed": 1777592519741,
+      "type": "file"
+    },
+    {
+      "path": "cicd-eic-pivot/terraform/main.tf",
+      "accessCount": 1,
+      "lastAccessed": 1777592575309,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

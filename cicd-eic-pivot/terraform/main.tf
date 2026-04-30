@@ -3,17 +3,13 @@ resource "aws_vpc" "scenario_vpc" {
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  tags = {
-    Name = "${var.scenario_name}-${var.beaver_id}-vpc"
-  }
+  tags = merge(local.common_tags, { Name = local.vpc_name })
 }
 
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.scenario_vpc.id
 
-  tags = {
-    Name = "${var.scenario_name}-${var.beaver_id}-igw"
-  }
+  tags = merge(local.common_tags, { Name = local.igw_name })
 }
 
 resource "aws_subnet" "public_subnet" {
@@ -22,9 +18,7 @@ resource "aws_subnet" "public_subnet" {
   map_public_ip_on_launch = true
   availability_zone       = "${var.region}a"
 
-  tags = {
-    Name = "${var.scenario_name}-${var.beaver_id}-public-subnet"
-  }
+  tags = merge(local.common_tags, { Name = local.public_subnet_name })
 }
 
 resource "aws_subnet" "private_subnet" {
@@ -32,9 +26,7 @@ resource "aws_subnet" "private_subnet" {
   cidr_block        = var.private_subnet_cidr
   availability_zone = "${var.region}a"
 
-  tags = {
-    Name = "${var.scenario_name}-${var.beaver_id}-private-subnet"
-  }
+  tags = merge(local.common_tags, { Name = local.private_subnet_name })
 }
 
 resource "aws_route_table" "public_rt" {
@@ -45,9 +37,7 @@ resource "aws_route_table" "public_rt" {
     gateway_id = aws_internet_gateway.igw.id
   }
 
-  tags = {
-    Name = "${var.scenario_name}-${var.beaver_id}-public-rt"
-  }
+  tags = merge(local.common_tags, { Name = local.public_rt_name })
 }
 
 resource "aws_route_table_association" "public_assoc" {
@@ -58,9 +48,7 @@ resource "aws_route_table_association" "public_assoc" {
 resource "aws_route_table" "private_rt" {
   vpc_id = aws_vpc.scenario_vpc.id
 
-  tags = {
-    Name = "${var.scenario_name}-${var.beaver_id}-private-rt"
-  }
+  tags = merge(local.common_tags, { Name = local.private_rt_name })
 }
 
 resource "aws_route_table_association" "private_assoc" {

@@ -1,4 +1,4 @@
-# Supply Chain EIC Pivot — Attack Path
+# CI/CD EIC Pivot — Attack Path
 
 ```mermaid
 flowchart TB

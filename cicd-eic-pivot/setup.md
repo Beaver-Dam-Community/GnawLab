@@ -1,4 +1,4 @@
-# Supply Chain EIC Pivot - Setup Guide
+# CI/CD EIC Pivot - Setup Guide
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ terraform init
 ## Step 4: Review the Plan
 
 ```bash
-terraform plan -var="gn_whitelist=[\"$(curl -s https://checkip.amazonaws.com)/32\"]"
+terraform plan
 ```
 
 Review the resources that will be created:
@@ -58,13 +58,18 @@ Review the resources that will be created:
 
 ## Step 5: Deploy the Scenario
 
-The `gn_whitelist` variable controls which IP addresses can reach GitLab and Atlantis. The command below auto-detects your current public IP:
+Your public IP is auto-detected at deploy time. Simply run:
 
 ```bash
-terraform apply -var="gn_whitelist=[\"$(curl -s https://checkip.amazonaws.com)/32\"]"
+terraform apply
 ```
 
 Type `yes` when prompted.
+
+> **Manual IP override:** If you need to specify your IP explicitly, run:
+> ```bash
+> terraform apply -var="whitelist_ip=YOUR.IP/32"
+> ```
 
 > **Note:** Deployment takes 3–5 minutes for Terraform to complete. GitLab CE requires an additional 15–20 minutes to fully initialize after the EC2 instance starts. Do not attempt to log in until the GitLab UI is accessible in your browser.
 
@@ -113,13 +118,10 @@ Create `terraform.tfvars` for custom settings:
 
 ```hcl
 # Optional: Specify your IP manually instead of auto-detecting
-gn_whitelist = ["YOUR.PUBLIC.IP/32"]
+whitelist_ip = "YOUR.PUBLIC.IP/32"
 
-# Optional: Use a different AWS region
-region = "us-west-2"
-
-# Optional: Custom identifier for resource naming
-beaver_id = "my-custom-id"
+# Optional: Use a different AWS CLI profile
+profile = "GnawLab"
 ```
 
 ## Troubleshooting
@@ -141,10 +143,16 @@ Test the webhook manually from the GitLab UI: navigate to `infra-repo → Settin
 
 ### IP address changed since deployment
 
-Re-apply with your current IP to update the security group whitelist:
+Re-apply to update the security group whitelist (IP is auto-detected):
 
 ```bash
-terraform apply -var="gn_whitelist=[\"$(curl -s https://checkip.amazonaws.com)/32\"]"
+terraform apply
+```
+
+To specify your IP manually:
+
+```bash
+terraform apply -var="whitelist_ip=YOUR.IP/32"
 ```
 
 ## Cost Estimate

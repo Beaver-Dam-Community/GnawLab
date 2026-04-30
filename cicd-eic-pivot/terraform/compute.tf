@@ -14,12 +14,12 @@ resource "tls_private_key" "target_key" {
 }
 
 resource "aws_key_pair" "target_key_pair" {
-  key_name   = "${var.scenario_name}-target-key-${var.beaver_id}"
+  key_name   = local.target_key_name
   public_key = tls_private_key.target_key.public_key_openssh
 }
 
 resource "aws_security_group" "gitlab_sg" {
-  name        = "${var.scenario_name}-gitlab-sg-${var.beaver_id}"
+  name        = local.gitlab_sg_name
   description = "Allow HTTP and SSH from whitelist for GitLab"
   vpc_id      = aws_vpc.scenario_vpc.id
 
@@ -27,7 +27,7 @@ resource "aws_security_group" "gitlab_sg" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = var.gn_whitelist
+    cidr_blocks = [local.whitelist_cidr]
   }
 
   # Allow Atlantis runner to call GitLab API internally
@@ -42,7 +42,7 @@ resource "aws_security_group" "gitlab_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = var.gn_whitelist
+    cidr_blocks = [local.whitelist_cidr]
   }
 
   egress {
@@ -52,13 +52,11 @@ resource "aws_security_group" "gitlab_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "${var.scenario_name}-gitlab-sg-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.gitlab_sg_name })
 }
 
 resource "aws_security_group" "bastion_sg" {
-  name        = "${var.scenario_name}-bastion-sg-${var.beaver_id}"
+  name        = local.bastion_sg_name
   description = "Allow SSH from whitelist, Atlantis webhook from GitLab"
   vpc_id      = aws_vpc.scenario_vpc.id
 
@@ -66,7 +64,7 @@ resource "aws_security_group" "bastion_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = var.gn_whitelist
+    cidr_blocks = [local.whitelist_cidr]
   }
 
   # Allow GitLab to deliver webhooks to Atlantis
@@ -84,13 +82,11 @@ resource "aws_security_group" "bastion_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "${var.scenario_name}-bastion-sg-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.bastion_sg_name })
 }
 
 resource "aws_security_group" "target_sg" {
-  name        = "${var.scenario_name}-target-sg-${var.beaver_id}"
+  name        = local.target_sg_name
   description = "Allow SSH only from Bastion security group"
   vpc_id      = aws_vpc.scenario_vpc.id
 
@@ -108,9 +104,7 @@ resource "aws_security_group" "target_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "${var.scenario_name}-target-sg-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.target_sg_name })
 }
 
 resource "aws_instance" "gitlab_server" {
@@ -130,15 +124,13 @@ resource "aws_instance" "gitlab_server" {
     region              = var.region
     atlantis_private_ip = local.atlantis_private_ip
     webhook_secret      = random_password.webhook_secret.result
-    ssm_token_path      = aws_ssm_parameter.atlantis_gitlab_token.name
+    ssm_token_path      = local.ssm_param_name
     main_tf_b64         = base64encode(file("${path.module}/../assets/infra-repo/main.tf"))
     variables_tf_b64    = base64encode(file("${path.module}/../assets/infra-repo/variables.tf"))
     atlantis_yaml_b64   = base64encode(file("${path.module}/../assets/infra-repo/atlantis.yaml"))
   }))
 
-  tags = {
-    Name = "${var.scenario_name}-gitlab-server-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.gitlab_name })
 }
 
 resource "aws_instance" "atlantis_server" {
@@ -158,12 +150,10 @@ resource "aws_instance" "atlantis_server" {
     region            = var.region
     gitlab_private_ip = local.gitlab_private_ip
     webhook_secret    = random_password.webhook_secret.result
-    ssm_token_path    = aws_ssm_parameter.atlantis_gitlab_token.name
+    ssm_token_path    = local.ssm_param_name
   }))
 
-  tags = {
-    Name = "${var.scenario_name}-atlantis-runner-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.atlantis_name })
 }
 
 resource "aws_instance" "bastion_host" {
@@ -179,9 +169,7 @@ resource "aws_instance" "bastion_host" {
               chmod 400 /home/ubuntu/target-key.pem
               EOF
 
-  tags = {
-    Name = "${var.scenario_name}-bastion-host-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.bastion_name })
 }
 
 resource "aws_instance" "target_server" {
@@ -204,7 +192,5 @@ resource "aws_instance" "target_server" {
               chmod 444 /home/ubuntu/flag.txt
               EOF
 
-  tags = {
-    Name = "${var.scenario_name}-target-server-${var.beaver_id}"
-  }
+  tags = merge(local.common_tags, { Name = local.target_name })
 }

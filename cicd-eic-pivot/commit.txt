@@ -1,0 +1,32 @@
+fix(supply-chain-eic-pivot): fix infrastructure bugs found during end-to-end validation
+
+## Bug Fixes
+
+### Hairpin NAT — git clone timeout
+  EC2 instances cannot reach their own Elastic IPs internally. 
+  The previous git insteadOf approach does not rewrite credential-embedded clone URLs.
+  Fixed by using iptables DNAT to redirect traffic at the network level.
+
+### Atlantis repo config — override rejected
+  Repo-level settings were rejected by Atlantis server defaults.
+  Fixed by adding /etc/atlantis-repos.yaml with allowed_overrides
+  and passing --repo-config to ExecStart.
+    
+### Terraform external data source — stdout parse error
+  External program produced non-JSON output on stdout.
+  Fixed by redirecting noise to /dev/null.
+  
+
+## Infrastructure (compute.tf)
+
+  - Added VPC-internal port 80 ingress to gitlab_sg
+  - Added port 4141 ingress to bastion_sg scoped to gitlab_sg
+  - Set metadata_options on Atlantis runner per scenario requirements
+
+## Outputs (outputs.tf)
+  Removed outputs that expose instance details before players discover them.
+
+## Housekeeping
+  - walkthrough.md: updated with validated commands
+  - assets/gitlab_credentials.txt: replaced live IP with placeholder
+  - .gitignore: added .omc/ and terraform/infra-repo/

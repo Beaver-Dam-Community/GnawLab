@@ -1,4 +1,4 @@
-# Supply Chain EIC Pivot
+# CI/CD EIC Pivot
 
 **Difficulty:** Medium  
 **Estimated Time:** 60 min  

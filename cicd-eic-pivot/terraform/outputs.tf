@@ -11,7 +11,7 @@ output "gitlab_server_url" {
 
 output "instructions" {
   value = <<EOF
-=== supply_chain_eic_pivot ===
+=== gnawlab-cicd-eic ===
 NOTE: GitLab takes 15-20 minutes to fully initialize after terraform apply.
 Wait until http://${aws_instance.gitlab_server.public_ip} is accessible before starting.
 

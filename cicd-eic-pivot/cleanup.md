@@ -1,4 +1,4 @@
-# Supply Chain EIC Pivot - Cleanup Guide
+# CI/CD EIC Pivot - Cleanup Guide
 
 ## Automated Cleanup (Recommended)
 
@@ -11,7 +11,7 @@ cd terraform
 ### Step 2: Destroy All Resources
 
 ```bash
-terraform destroy -var="gn_whitelist=[\"$(curl -s https://checkip.amazonaws.com)/32\"]"
+terraform destroy
 ```
 
 Type `yes` when prompted.
@@ -38,23 +38,23 @@ If Terraform destroy fails, manually delete these resources:
 
 1. **EC2 Instances**
    - Go to [EC2 Console → Instances](https://console.aws.amazon.com/ec2/home#Instances)
-   - Search for instances tagged with `supply-chain-eic-pivot`
+   - Search for instances tagged with `cicd-eic-pivot`
    - Terminate the GitLab server, Atlantis server, Bastion Host, and Target Server
 
 2. **Security Groups**
    - Go to [EC2 Console → Security Groups](https://console.aws.amazon.com/ec2/home#SecurityGroups)
-   - Search for groups containing `supply-chain-eic-pivot`
+   - Search for groups containing `gnawlab-cicd-eic`
    - Delete all associated security groups (terminate instances first to release dependencies)
 
 3. **VPC**
    - Go to [VPC Console](https://console.aws.amazon.com/vpc/)
-   - Search for VPC containing `supply-chain-eic-pivot`
+   - Search for VPC containing `gnawlab-cicd-eic`
    - Delete subnets, route tables, and internet gateway
    - Delete the VPC
 
 4. **IAM Roles**
    - Go to [IAM Console → Roles](https://console.aws.amazon.com/iam/home#/roles)
-   - Search for roles containing `supply-chain-eic-pivot`
+   - Search for roles containing `gnawlab-cicd-eic`
    - Detach and delete inline policies first
    - Delete the roles and instance profiles
 
@@ -72,7 +72,7 @@ export AWS_REGION=us-east-1
 
 # Terminate all EC2 instances tagged with this scenario
 INSTANCE_IDS=$(aws ec2 describe-instances \
-  --filters "Name=tag:Scenario,Values=supply-chain-eic-pivot" \
+  --filters "Name=tag:Scenario,Values=cicd-eic-pivot" \
             "Name=instance-state-name,Values=running,stopped" \
   --query 'Reservations[].Instances[].InstanceId' \
   --output text)
@@ -80,7 +80,7 @@ INSTANCE_IDS=$(aws ec2 describe-instances \
 aws ec2 terminate-instances --instance-ids $INSTANCE_IDS
 
 # Delete SSM parameter
-aws ssm delete-parameter --name "/<scenario_name>-<beaver_id>/atlantis-gitlab-token"
+aws ssm delete-parameter --name "/gnawlab-cicd-eic-<scenario_id>/atlantis-gitlab-token"
 ```
 
 ## Remove Local Files
@@ -98,7 +98,7 @@ Check for remaining resources by tag:
 
 ```bash
 aws resourcegroupstaggingapi get-resources \
-  --tag-filters Key=Scenario,Values=supply-chain-eic-pivot \
+  --tag-filters Key=Scenario,Values=cicd-eic-pivot \
   --region us-east-1 \
   --profile GnawLab
 ```

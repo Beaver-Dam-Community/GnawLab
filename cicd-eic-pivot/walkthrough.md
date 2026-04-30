@@ -147,7 +147,7 @@ Extract the role name:
 ROLE_NAME=$(aws sts get-caller-identity \
   --query 'Arn' --output text | cut -d'/' -f2)
 echo $ROLE_NAME
-# supply-chain-eic-pivot-atlantis-role-<beaver_id>
+# gnawlab-cicd-eic-atlantis-role-<scenario_id>
 ```
 
 ### 4.2 List Inline Policies
@@ -161,7 +161,7 @@ Expected output:
 ```json
 {
     "PolicyNames": [
-        "supply-chain-eic-pivot-atlantis-policy-<beaver_id>"
+        "gnawlab-cicd-eic-atlantis-policy-<scenario_id>"
     ]
 }
 ```
@@ -171,7 +171,7 @@ One inline policy found. Retrieve its full document:
 ```bash
 aws iam get-role-policy \
   --role-name $ROLE_NAME \
-  --policy-name supply-chain-eic-pivot-atlantis-policy-<beaver_id>
+  --policy-name gnawlab-cicd-eic-atlantis-policy-<scenario_id>
 ```
 
 Expected output:
@@ -194,7 +194,7 @@ Expected output:
             {
                 "Action": ["ssm:GetParameter"],
                 "Effect": "Allow",
-                "Resource": "arn:aws:ssm:us-east-1:123456789012:parameter/supply-chain-eic-pivot-*/atlantis-gitlab-token"
+                "Resource": "arn:aws:ssm:us-east-1:123456789012:parameter/gnawlab-cicd-eic-*/atlantis-gitlab-token"
             }
         ]
     }

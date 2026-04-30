@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"NEW_TOKEN=\\\"a37967bb7b1e19310f196b3dbdbe8b6b3d9a4a50baec4b39b08e6ac4748e8455\\\"\\n\\n# Check full webhook delivery response\\ncurl -s \\\"http://44.200.127.43/api/v4/projects/1/hooks/1/events\\\" ...",
+  "error": "Exit code 1",
+  "timestamp": "2026-04-30T16:31:26.160Z",
+  "retry_count": 1
+}
