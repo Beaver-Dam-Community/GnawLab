@@ -269,9 +269,16 @@ Resource: arn:aws:logs:us-east-1:123456789012:log-group:/corp/deploy-pipeline
 
 ### Method 2: SSTI curl (Alternative)
 
-From the SSTI form or reverse shell:
+From the reverse shell, dump the Prowler dashboard and look for FAIL findings:
+
 ```bash
-curl -s http://10.0.6.239:9090/ | grep -A3 "kms_encryption"
+curl -s http://10.0.6.239:9090/ | grep -i "FAIL"
+```
+
+Identify log group names in the FAIL results, then narrow down:
+
+```bash
+curl -s http://10.0.6.239:9090/ | grep -i "FAIL" | grep -i "cloudwatch"
 ```
 
 ---
