@@ -1,6 +1,6 @@
 # ── JSN Incident Report Generator (webapp) ───────────────────────────────────
-# 외부 유일 진입점. IAM Instance Profile 없음. EIP로 외부 노출.
-# [의도적 취약점] Server-Side Template Injection (SSTI) — Summary 필드
+# Sole external entry point. No IAM Instance Profile. Exposed externally via EIP.
+# [Intentional Vulnerability] Server-Side Template Injection (SSTI) — Summary field
 
 resource "aws_instance" "webapp" {
   ami                         = data.aws_ami.al2023.id
@@ -8,8 +8,8 @@ resource "aws_instance" "webapp" {
   subnet_id                   = aws_subnet.security.id
   vpc_security_group_ids      = [aws_security_group.webapp.id]
   user_data_replace_on_change = true
-  # key_name 없음 — SSH 불필요, SSM도 없음 (instance profile 미부착 의도적 설계)
-  # iam_instance_profile 없음 — 의도적 설계
+  # no key_name — SSH not needed, SSM also absent (intentional design: no instance profile attached)
+  # no iam_instance_profile — intentional design
 
   user_data = base64encode(<<-USERDATA
     #!/bin/bash
@@ -29,7 +29,7 @@ resource "aws_instance" "webapp" {
     app = Flask(__name__)
 
     HTML = """<!DOCTYPE html>
-    <html lang="ko">
+    <html lang="en">
     <head>
       <meta charset="UTF-8">
       <title>JSN Incident Report Generator</title>
@@ -49,16 +49,16 @@ resource "aws_instance" "webapp" {
     </head>
     <body>
       <h2>JSN Incident Report Generator</h2>
-      <p style="color:#8b949e;font-size:.85rem">장애 발생 시 내부 공유용 리포트를 생성합니다.</p>
+      <p style="color:#8b949e;font-size:.85rem">Generates internal incident reports for sharing during outages.</p>
       <form method="post">
         <label>Service Name</label>
-        <input type="text" name="service" placeholder="예: jsn-payment-api">
+        <input type="text" name="service" placeholder="e.g. jsn-payment-api">
         <label>Incident Time</label>
-        <input type="text" name="incident_time" placeholder="예: 2026-04-30 14:23">
+        <input type="text" name="incident_time" placeholder="e.g. 2026-04-30 14:23">
         <label>Owner</label>
-        <input type="text" name="owner" placeholder="예: kim.devops">
+        <input type="text" name="owner" placeholder="e.g. kim.devops">
         <label>Summary</label>
-        <textarea name="summary" placeholder="장애 내용을 입력하세요"></textarea>
+        <textarea name="summary" placeholder="Describe the incident"></textarea>
         <button type="submit">Generate Report</button>
       </form>
       {% if result %}<div class="result">{{ result }}</div>{% endif %}
@@ -75,9 +75,9 @@ resource "aws_instance" "webapp" {
             summary       = request.form.get('summary', '')
 
             # ──────────────────────────────────────────────────────────
-            # [의도적 취약점] Server-Side Template Injection
-            # Summary 입력값을 템플릿 소스에 직접 결합 후 render_template_string() 호출
-            # 나머지 필드는 Jinja2 변수로 안전하게 처리됨
+            # [Intentional Vulnerability] Server-Side Template Injection
+            # The Summary input is concatenated directly into the template source before calling render_template_string()
+            # All other fields are safely handled as Jinja2 variables
             # ──────────────────────────────────────────────────────────
             report_template = (
                 "[JSN Incident Report]\n"
@@ -131,7 +131,7 @@ resource "aws_instance" "webapp" {
   }
 }
 
-# EIP — webapp만 외부 노출
+# EIP — webapp is the only instance exposed externally
 resource "aws_eip" "webapp" {
   instance = aws_instance.webapp.id
   domain   = "vpc"
@@ -140,14 +140,14 @@ resource "aws_eip" "webapp" {
 }
 
 # ── Prowler Dashboard ──────────────────────────────────────────────────────────
-# 내부망 전용 — public IP 없음. dashboard-sg로 webapp-sg에서만 9090 접근 가능.
-# 인증 없음 — 내부망 신뢰 기반 설계
-# 역할: KMS FAIL 단서 제공 → Steampipe 조회 대상 확정
+# Internal network only — no public IP. Port 9090 accessible from webapp-sg only via dashboard-sg.
+# No authentication — trust-based internal network design
+# Role: provides the KMS FAIL clue → confirms the log group target for Steampipe queries
 
 resource "aws_instance" "prowler" {
   ami                         = data.aws_ami.al2023.id
   instance_type               = "t3.medium"
-  subnet_id                   = aws_subnet.tools.id # NAT 라우트 — public IP 없이 패키지 설치 가능
+  subnet_id                   = aws_subnet.tools.id # NAT route — package installation possible without a public IP
   vpc_security_group_ids      = [aws_security_group.dashboard.id]
   iam_instance_profile        = aws_iam_instance_profile.prowler_ec2.name
   user_data_replace_on_change = true
@@ -160,7 +160,7 @@ resource "aws_instance" "prowler" {
     dnf install -y python3 python3-pip nginx git || true
     mkdir -p /var/prowler/output
 
-    # 실습 안정성 보장: Prowler 설치/스캔 상태와 무관하게 단서 페이지를 먼저 제공한다.
+    # Scenario stability: the clue page is served first, regardless of Prowler installation or scan status.
     cat > /var/prowler/output/prowler-output.html << 'HTMLEOF'
     <!DOCTYPE html>
     <html>
@@ -187,7 +187,7 @@ resource "aws_instance" "prowler" {
     </html>
     HTMLEOF
 
-    # Nginx 설정 (인증 없음)
+    # Nginx configuration (no authentication)
     cat > /etc/nginx/conf.d/prowler.conf << 'NGINXEOF'
     server {
         listen 9090;
@@ -206,7 +206,7 @@ resource "aws_instance" "prowler" {
     systemctl enable nginx
     systemctl restart nginx
 
-    # 실제 Prowler 스캔은 best-effort로 실행한다. 실패해도 실습 단서 페이지는 유지된다.
+    # The actual Prowler scan runs on a best-effort basis. The clue page remains available even if the scan fails.
     pip3 install prowler || true
     mkdir -p /var/prowler/scan
     if command -v prowler >/dev/null 2>&1; then
@@ -227,14 +227,14 @@ resource "aws_instance" "prowler" {
 }
 
 # ── Steampipe Query Console ────────────────────────────────────────────────────
-# 내부망 전용 — public IP 없음. dashboard-sg로 webapp-sg에서만 9194 접근 가능.
-# 인증 없음 — 내부망 신뢰 기반 설계
-# 역할: /corp/deploy-pipeline 로그 조회 → IAM Git 자격증명 발견
+# Internal network only — no public IP. Port 9194 accessible from webapp-sg only via dashboard-sg.
+# No authentication — trust-based internal network design
+# Role: queries /corp/deploy-pipeline logs → discovers IAM Git credentials
 
 resource "aws_instance" "steampipe" {
   ami                    = data.aws_ami.ubuntu2204.id
   instance_type          = "t3.small"
-  subnet_id              = aws_subnet.tools.id # NAT 라우트 — public IP 없이 패키지 설치 가능
+  subnet_id              = aws_subnet.tools.id # NAT route — package installation possible without a public IP
   vpc_security_group_ids = [aws_security_group.dashboard.id]
   iam_instance_profile   = aws_iam_instance_profile.steampipe_ec2.name
 
@@ -245,13 +245,13 @@ resource "aws_instance" "steampipe" {
     apt-get update -y
     apt-get install -y curl python3 python3-pip
 
-    # Steampipe 설치
+    # Install Steampipe
     /bin/sh -c "$(curl -fsSL https://steampipe.io/install/steampipe.sh)"
 
-    # AWS 플러그인 설치 (ubuntu 사용자로)
+    # Install AWS plugin (as the ubuntu user)
     sudo -u ubuntu /usr/local/bin/steampipe plugin install aws
 
-    # AWS 플러그인 설정 (Instance Profile로 자동 인증)
+    # Configure AWS plugin (auto-authenticated via Instance Profile)
     sudo -u ubuntu mkdir -p /home/ubuntu/.steampipe/config
     sudo -u ubuntu tee /home/ubuntu/.steampipe/config/aws.spc > /dev/null << 'AWSCONF'
     connection "aws" {
@@ -260,7 +260,7 @@ resource "aws_instance" "steampipe" {
     }
     AWSCONF
 
-    # Flask 웹앱 설치
+    # Install Flask web app
     pip3 install flask psycopg2-binary
 
     mkdir -p /opt/jsn-query
@@ -281,7 +281,7 @@ resource "aws_instance" "steampipe" {
     }
 
     CONSOLE_HTML = """<!DOCTYPE html>
-    <html lang="ko">
+    <html lang="en">
     <head>
       <meta charset="UTF-8">
       <title>JSN Security Analysis</title>
@@ -301,7 +301,7 @@ resource "aws_instance" "steampipe" {
     </head>
     <body>
       <h2>JSN Security Analysis - SQL Query Console</h2>
-      <textarea id="sql" placeholder="-- SQL을 입력하세요
+      <textarea id="sql" placeholder="-- Enter SQL here
     select * from aws_cloudwatch_log_group limit 10;"></textarea><br>
       <button onclick="runQuery()">Run Query &#9654;</button>
       <div id="error"></div>
@@ -318,7 +318,7 @@ resource "aws_instance" "steampipe" {
           });
           const data = await resp.json();
           if (data.error) { document.getElementById('error').innerText = data.error; return; }
-          if (!data.rows.length) { document.getElementById('results').innerText = '(결과 없음)'; return; }
+          if (!data.rows.length) { document.getElementById('results').innerText = '(No results)'; return; }
           let html = '<table><tr>' + data.columns.map(c => '<th>'+c+'</th>').join('') + '</tr>';
           data.rows.forEach(r => { html += '<tr>' + r.map(v => '<td>'+(v??'')+'</td>').join('') + '</tr>'; });
           document.getElementById('results').innerHTML = html + '</table>';
@@ -335,9 +335,9 @@ resource "aws_instance" "steampipe" {
     def query():
         sql = request.json.get('sql', '').strip()
         if not re.match(r'^\s*select\b', sql, re.IGNORECASE):
-            return jsonify({'error': 'SELECT 구문만 허용됩니다.'}), 400
+            return jsonify({'error': 'Only SELECT statements are allowed.'}), 400
         if sql.rstrip(';').count(';') > 0:
-            return jsonify({'error': '한 번에 하나의 쿼리만 실행할 수 있습니다.'}), 400
+            return jsonify({'error': 'Only one query can be executed at a time.'}), 400
         try:
             conn = psycopg2.connect(**STEAMPIPE_CONN)
             cur = conn.cursor()
@@ -356,7 +356,7 @@ resource "aws_instance" "steampipe" {
 
     chown -R ubuntu:ubuntu /opt/jsn-query
 
-    # Steampipe service systemd
+    # Steampipe service (systemd unit)
     tee /etc/systemd/system/steampipe-service.service > /dev/null << 'SERVICE'
     [Unit]
     Description=Steampipe Service (PostgreSQL endpoint)
@@ -373,7 +373,7 @@ resource "aws_instance" "steampipe" {
     WantedBy=multi-user.target
     SERVICE
 
-    # Flask 웹앱 systemd
+    # Flask web app (systemd unit)
     tee /etc/systemd/system/jsn-query-web.service > /dev/null << 'SERVICE'
     [Unit]
     Description=JSN SQL Query Web App
@@ -394,7 +394,7 @@ resource "aws_instance" "steampipe" {
     systemctl daemon-reload
     systemctl enable steampipe-service jsn-query-web
     systemctl start steampipe-service
-    # Flask는 steampipe service start 후 기동
+    # Flask starts after the steampipe service is up
     sleep 15
     systemctl start jsn-query-web
   USERDATA

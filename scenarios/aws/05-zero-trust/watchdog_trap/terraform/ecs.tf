@@ -12,8 +12,8 @@ resource "aws_ecs_cluster" "main" {
 }
 
 # ── Bootstrap Task Definition ─────────────────────────────────────────────────
-# 초기 서비스 생성용 (desired_count=0이므로 실제 구동 안 됨)
-# 실제 배포는 CodeDeploy가 task-definition.json + imageDetail.json으로 등록한 task def 사용
+# Used for initial service creation (desired_count=0 so it does not actually run)
+# Actual deployments use the task definition registered by CodeDeploy via task-definition.json + imageDetail.json
 
 resource "aws_ecs_task_definition" "bootstrap" {
   family                   = "${var.project_name}-app"
@@ -50,7 +50,7 @@ resource "aws_ecs_service" "main" {
   name            = "${var.project_name}-service"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.bootstrap.arn
-  desired_count   = 1 # 파이프라인 첫 실행 전까지 bootstrap image로 (pull 실패 허용); CodeDeploy가 교체
+  desired_count   = 1 # Uses bootstrap image until the first pipeline run (pull failure tolerated); CodeDeploy replaces it
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -66,12 +66,12 @@ resource "aws_ecs_service" "main" {
   }
 
   deployment_controller {
-    type = "CODE_DEPLOY" # CodeDeploy Blue/Green 필수
+    type = "CODE_DEPLOY" # Required for CodeDeploy Blue/Green deployments
   }
 
   lifecycle {
-    # CodeDeploy가 task_definition, load_balancer를 직접 관리
-    # desired_count는 CodeDeploy 배포 이후 CodeDeploy가 설정하므로 ignore
+    # CodeDeploy directly manages task_definition and load_balancer
+    # desired_count is set by CodeDeploy after each deployment, so it is ignored here
     ignore_changes = [task_definition, desired_count, load_balancer]
   }
 

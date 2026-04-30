@@ -71,7 +71,7 @@ resource "aws_codepipeline" "main" {
         AppSpecTemplateArtifact        = "SourceArtifact"
         AppSpecTemplatePath            = "appspec.yml"
         Image1ArtifactName             = "BuildArtifact"
-        Image1ContainerName            = "IMAGE1_NAME" # task-definition.json의 <IMAGE1_NAME> 치환
+        Image1ContainerName            = "IMAGE1_NAME" # substitutes <IMAGE1_NAME> placeholder in task-definition.json
       }
     }
   }

@@ -1,11 +1,11 @@
-# ── Secrets Manager — FLAG 보관 ────────────────────────────────────────────────
-# FLAG 원본을 CodeCommit 밖에 보관 → dev-user는 읽기 권한 없음
-# ecsTaskExecutionRole만 GetSecretValue 허용 → ECS Agent가 컨테이너에 주입
+# ── Secrets Manager — FLAG storage ────────────────────────────────────────────────
+# The original FLAG is stored outside CodeCommit → dev-user has no read permission
+# Only ecsTaskExecutionRole is allowed GetSecretValue → ECS Agent injects it into the container
 
 resource "aws_secretsmanager_secret" "flag" {
   name                    = "${var.project_name}/flag"
   description             = "CTF flag injected into the ECS task as environment variable"
-  recovery_window_in_days = 0 # 즉시 삭제 허용 (CTF 환경 teardown용)
+  recovery_window_in_days = 0 # allow immediate deletion (for CTF environment teardown)
 
   tags = { Name = "${var.project_name}-flag" }
 }

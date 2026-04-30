@@ -1,7 +1,7 @@
 # ── CodeBuild Project ─────────────────────────────────────────────────────────
-# [의도적 취약점] buildspec 인라인에 dev-user Git 자격증명 하드코딩
-# → CodeBuild 실행 시 git clone 명령이 /corp/deploy-pipeline 로그에 기록됨
-# → Steampipe로 로그를 조회하면 자격증명 평문 노출
+# [Intentional Vulnerability] dev-user Git credentials are hardcoded inline in the buildspec
+# → The git clone command is recorded in /corp/deploy-pipeline logs during CodeBuild execution
+# → Querying the logs via Steampipe exposes the credentials in plaintext
 
 resource "aws_codebuild_project" "main" {
   name         = "${var.project_name}-build"
@@ -16,7 +16,7 @@ resource "aws_codebuild_project" "main" {
     compute_type    = "BUILD_GENERAL1_SMALL"
     image           = "aws/codebuild/standard:7.0"
     type            = "LINUX_CONTAINER"
-    privileged_mode = true # Docker 빌드에 필요
+    privileged_mode = true # Required for Docker builds
 
     environment_variable {
       name  = "ECR_REPO_URI"
@@ -32,7 +32,7 @@ resource "aws_codebuild_project" "main" {
   source {
     type = "CODEPIPELINE"
 
-    # buildspec 인라인: dev-user Git 자격증명 값이 Terraform 렌더링 시 평문으로 삽입됨
+    # Inline buildspec: dev-user Git credential values are inserted in plaintext at Terraform render time
     buildspec = <<-BUILDSPEC
       version: 0.2
       phases:

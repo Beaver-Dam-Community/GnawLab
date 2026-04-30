@@ -1,6 +1,6 @@
 resource "aws_s3_bucket" "artifacts" {
   bucket        = "${var.project_name}-pipeline-artifacts-${data.aws_caller_identity.current.account_id}"
-  force_destroy = true # terraform destroy 시 객체 포함 삭제
+  force_destroy = true # deletes all objects when running terraform destroy
 
   tags = { Name = "${var.project_name}-pipeline-artifacts" }
 }

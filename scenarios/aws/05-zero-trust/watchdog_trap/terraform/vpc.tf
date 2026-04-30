@@ -15,8 +15,8 @@ resource "aws_internet_gateway" "main" {
 }
 
 # ── NAT Gateway ─────────────────────────────────────────────────────────────────
-# public_a에 NAT 배치 → tools_subnet (prowler/steampipe) outbound 보장
-# ECS private subnet도 여기에 연결
+# NAT placed in public_a → guarantees outbound for tools_subnet (prowler/steampipe)
+# ECS private subnets are also connected here
 
 resource "aws_eip" "nat" {
   domain = "vpc"
@@ -25,7 +25,7 @@ resource "aws_eip" "nat" {
 
 resource "aws_nat_gateway" "main" {
   allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public_a.id # NAT는 반드시 public subnet(IGW 라우트)에 있어야 함
+  subnet_id     = aws_subnet.public_a.id # NAT must be in a public subnet (with an IGW route)
 
   tags = { Name = "${var.project_name}-nat-gw" }
 
@@ -34,9 +34,9 @@ resource "aws_nat_gateway" "main" {
 
 # ── Subnets ─────────────────────────────────────────────────────────────────────
 
-# security_subnet — webapp 전용 (IGW 라우트 유지, EIP로 외부 노출)
-# map_public_ip_on_launch = true: user_data 실행 시(EIP 부착 전) 임시 public IP로 인터넷 접근 보장
-# EIP 부착 후 임시 IP는 자동 회수됨 — webapp 전용 서브넷이므로 보안 영향 없음
+# security_subnet — dedicated to webapp (IGW route retained, exposed externally via EIP)
+# map_public_ip_on_launch = true: ensures internet access via a temporary public IP during user_data execution (before EIP attachment)
+# The temporary IP is automatically released after EIP attachment — no security impact since this is a webapp-only subnet
 resource "aws_subnet" "security" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
@@ -46,9 +46,9 @@ resource "aws_subnet" "security" {
   tags = { Name = "${var.project_name}-security-subnet" }
 }
 
-# tools_subnet — prowler + steampipe 배치 (NAT 라우트)
-# public IP 없이 NAT GW로 outbound → 패키지 설치 가능
-# SG(dashboard-sg)로 인바운드는 webapp-sg에서만
+# tools_subnet — hosts prowler + steampipe (NAT route)
+# Outbound via NAT GW without a public IP → allows package installation
+# Inbound restricted to webapp-sg only via SG (dashboard-sg)
 resource "aws_subnet" "tools" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.6.0/24"
@@ -58,7 +58,7 @@ resource "aws_subnet" "tools" {
   tags = { Name = "${var.project_name}-tools-subnet" }
 }
 
-# public_subnet_a / _b — ALB 배치 (AZ 분산 필수) + NAT GW 배치
+# public_subnet_a / _b — hosts ALB (multi-AZ required) + NAT GW placement
 resource "aws_subnet" "public_a" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.2.0/24"
@@ -77,7 +77,7 @@ resource "aws_subnet" "public_b" {
   tags = { Name = "${var.project_name}-public-b" }
 }
 
-# private_subnet_a / _b — ECS Fargate 배치 (NAT 라우트)
+# private_subnet_a / _b — hosts ECS Fargate (NAT route)
 resource "aws_subnet" "private_a" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.4.0/24"
@@ -97,7 +97,7 @@ resource "aws_subnet" "private_b" {
 # ── Route Tables ────────────────────────────────────────────────────────────────
 
 # public (IGW): security_subnet + ALB public subnets
-# webapp EIP 인바운드가 이 라우트에 의존함 — 절대 NAT로 변경 금지
+# webapp EIP inbound depends on this route — do NOT change to NAT
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -124,7 +124,7 @@ resource "aws_route_table_association" "public_b" {
   route_table_id = aws_route_table.public.id
 }
 
-# nat: tools_subnet + ECS private subnets → NAT GW
+# nat: tools_subnet + ECS private subnets → routed through NAT GW
 resource "aws_route_table" "nat" {
   vpc_id = aws_vpc.main.id
 
@@ -153,7 +153,7 @@ resource "aws_route_table_association" "private_b" {
 
 # ── Security Groups ─────────────────────────────────────────────────────────────
 
-# webapp-sg — JSN Incident Report Generator (유일한 외부 진입점)
+# webapp-sg — JSN Incident Report Generator (sole external entry point)
 resource "aws_security_group" "webapp" {
   name        = "${var.project_name}-webapp-sg"
   description = "External access for JSN Incident Report Generator SSTI RCE entrypoint"
@@ -177,8 +177,8 @@ resource "aws_security_group" "webapp" {
   tags = { Name = "${var.project_name}-webapp-sg" }
 }
 
-# dashboard-sg — Prowler + Steampipe (webapp-sg에서만 인바운드)
-# tools_subnet에 배치되어 public IP 없음 + SG로 이중 차단
+# dashboard-sg — Prowler + Steampipe (inbound from webapp-sg only)
+# Placed in tools_subnet with no public IP + double-blocked by SG
 resource "aws_security_group" "dashboard" {
   name        = "${var.project_name}-dashboard-sg"
   description = "Internal Prowler and Steampipe access from webapp-sg only"
@@ -210,7 +210,7 @@ resource "aws_security_group" "dashboard" {
   tags = { Name = "${var.project_name}-dashboard-sg" }
 }
 
-# alb-sg — ALB (80 prod + 8080 CodeDeploy test)
+# alb-sg — ALB (port 80 prod + 8080 CodeDeploy test)
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
   description = "ALB: port 80 (prod) + 8080 (CodeDeploy test)"
@@ -242,7 +242,7 @@ resource "aws_security_group" "alb" {
   tags = { Name = "${var.project_name}-alb-sg" }
 }
 
-# ecs-sg — ECS Fargate (ALB에서만 3000 인바운드)
+# ecs-sg — ECS Fargate (port 3000 inbound from ALB only)
 resource "aws_security_group" "ecs" {
   name        = "${var.project_name}-ecs-sg"
   description = "ECS Fargate: port 3000 from ALB only"

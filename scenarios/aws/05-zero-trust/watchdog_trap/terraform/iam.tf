@@ -6,7 +6,7 @@ locals {
 }
 
 # ── dev-user ────────────────────────────────────────────────────────────────────
-# [의도적 취약점] IAM Git 자격증명이 buildspec에 하드코딩되어 CloudWatch 로그에 평문 노출됨
+# [Intentional Vulnerability] IAM Git credentials are hardcoded in the buildspec and exposed in plaintext in CloudWatch logs
 
 resource "aws_iam_user" "dev_user" {
   name = "dev-user"
@@ -27,24 +27,24 @@ resource "aws_iam_user_policy" "dev_user_codecommit" {
           "codecommit:GitPull",
           "codecommit:GitPush"
         ]
-        # jsn-config 레포에만 한정 — 다른 레포 접근 불가
+        # Scoped to jsn-config repo only — no access to other repositories
         Resource = local.codecommit_repo_arn
       }
     ]
   })
 }
 
-# CodeCommit HTTPS 자격증명 (service-specific credential)
-# 생성된 username/password가 buildspec에 하드코딩되는 것이 취약점의 핵심
+# CodeCommit HTTPS credentials (service-specific credential)
+# The core of the vulnerability is that the generated username/password are hardcoded in the buildspec
 resource "aws_iam_service_specific_credential" "dev_user_git" {
   service_name = "codecommit.amazonaws.com"
   user_name    = aws_iam_user.dev_user.name
 }
 
 # ── prowler-ec2-role ────────────────────────────────────────────────────────────
-# 의도: 로그 그룹 메타데이터(KMS 여부 등)만 확인 가능
-# 핵심 제한: logs:GetLogEvents, logs:FilterLogEvents 권한 없음
-#            → 로그 내용 직접 조회 불가 → Steampipe로 유도
+# Intent: can only inspect log group metadata (e.g., KMS encryption status)
+# Key restriction: no logs:GetLogEvents or logs:FilterLogEvents permission
+#                  → cannot directly read log contents → directs participants to Steampipe
 
 resource "aws_iam_role" "prowler_ec2" {
   name = "${var.project_name}-prowler-ec2-role"
@@ -75,8 +75,8 @@ resource "aws_iam_role_policy" "prowler_ec2_policy" {
           "logs:DescribeLogGroups",
           "logs:DescribeLogStreams",
           "logs:DescribeMetricFilters"
-          # logs:GetLogEvents 없음 — 로그 내용 조회 불가 (의도적)
-          # logs:FilterLogEvents 없음 — 로그 검색 불가 (의도적)
+          # logs:GetLogEvents absent — cannot read log content (intentional)
+          # logs:FilterLogEvents absent — cannot search logs (intentional)
         ]
         Resource = "*"
       },
@@ -99,8 +99,8 @@ resource "aws_iam_instance_profile" "prowler_ec2" {
 }
 
 # ── steampipe-ec2-role ──────────────────────────────────────────────────────────
-# 의도: 로그 내용 조회 가능 → /corp/deploy-pipeline 에서 Git 자격증명 발견
-# Prowler와 달리 GetLogEvents, FilterLogEvents 허용
+# Intent: can read log content → discovers Git credentials from /corp/deploy-pipeline
+# Unlike Prowler, GetLogEvents and FilterLogEvents are permitted
 
 resource "aws_iam_role" "steampipe_ec2" {
   name = "${var.project_name}-steampipe-ec2-role"
@@ -130,8 +130,8 @@ resource "aws_iam_role_policy" "steampipe_ec2_policy" {
         Action = [
           "logs:DescribeLogGroups",
           "logs:DescribeLogStreams",
-          "logs:GetLogEvents",   # Prowler에는 없음 — 역할 분리 핵심
-          "logs:FilterLogEvents" # Prowler에는 없음 — 역할 분리 핵심
+          "logs:GetLogEvents",   # Absent in Prowler role — key to role separation
+          "logs:FilterLogEvents" # Absent in Prowler role — key to role separation
         ]
         Resource = "*"
       }
@@ -384,8 +384,8 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# FLAG는 Secrets Manager에 보관 → ECS Agent가 컨테이너에 주입
-# dev-user에게는 이 권한 없음 → 클론 후 ARN만 보이고 값 읽기 불가
+# FLAG is stored in Secrets Manager → ECS Agent injects it into the container
+# dev-user does not have this permission → after cloning, only the ARN is visible; the value cannot be read
 resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
   name = "${var.project_name}-ecs-execution-secrets-policy"
   role = aws_iam_role.ecs_task_execution.id

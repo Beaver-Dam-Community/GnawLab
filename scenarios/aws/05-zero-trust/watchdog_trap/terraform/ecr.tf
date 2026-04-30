@@ -9,7 +9,7 @@ resource "aws_ecr_repository" "app" {
   tags = { Name = "${var.project_name}-app" }
 }
 
-# 오래된 이미지 자동 정리 (실습 환경 비용 절감)
+# Automatically clean up old images (reduces costs in the lab environment)
 resource "aws_ecr_lifecycle_policy" "app" {
   repository = aws_ecr_repository.app.name
 

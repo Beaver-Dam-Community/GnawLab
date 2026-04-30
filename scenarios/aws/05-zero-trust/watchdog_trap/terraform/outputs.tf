@@ -1,10 +1,10 @@
-# ── 참가자 제공 정보 ──────────────────────────────────────────────────────────────
+# ── Information provided to participants ──────────────────────────────────────────────────────────────
 output "webapp_url" {
   description = "JSN Incident Report Generator URL for participants"
   value       = "http://${aws_eip.webapp.public_ip}"
 }
 
-# ── start.sh / teardown 내부 참조용 ──────────────────────────────────────────────
+# ── Internal reference for start.sh / teardown ──────────────────────────────────────────────
 output "webapp_public_ip" { value = aws_eip.webapp.public_ip }
 output "pipeline_name" { value = aws_codepipeline.main.name }
 output "ecr_repository_url" { value = aws_ecr_repository.app.repository_url }
@@ -23,9 +23,15 @@ output "dev_user_codecommit_password" {
 output "ecs_task_execution_role_arn" { value = aws_iam_role.ecs_task_execution.arn }
 output "flag_secret_arn" { value = aws_secretsmanager_secret.flag.arn }
 
-# ── 운영자 확인용 (operator-only, 참가자 미노출) ──────────────────────────────────
-output "prowler_private_ip" { value = aws_instance.prowler.private_ip }
-output "steampipe_private_ip" { value = aws_instance.steampipe.private_ip }
+# ── Operator reference only (not exposed to participants) ──────────────────────────────────
+output "prowler_private_ip" {
+  value     = aws_instance.prowler.private_ip
+  sensitive = true
+}
+output "steampipe_private_ip" {
+  value     = aws_instance.steampipe.private_ip
+  sensitive = true
+}
 output "alb_dns_name" { value = aws_lb.main.dns_name }
 output "codebuild_project" { value = aws_codebuild_project.main.name }
 output "codedeploy_app" { value = aws_codedeploy_app.main.name }
