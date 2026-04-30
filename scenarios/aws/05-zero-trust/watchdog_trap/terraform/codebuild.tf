@@ -5,7 +5,7 @@
 
 resource "aws_codebuild_project" "main" {
   name         = "${var.project_name}-build"
-  description  = "Build the JSN application Docker image and push it to ECR"
+  description  = "Build the BeaverDam application Docker image and push it to ECR"
   service_role = aws_iam_role.codebuild.arn
 
   artifacts {
@@ -45,8 +45,8 @@ resource "aws_codebuild_project" "main" {
             - REPO_PASS=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' '${aws_iam_service_specific_credential.dev_user_git.service_password}')
             - REPO_HOST="${replace(aws_codecommit_repository.config.clone_url_http, "https://", "")}"
             - echo "Cloning https://$REPO_USER:$REPO_PASS@$REPO_HOST"
-            - git clone "https://$REPO_USER:$REPO_PASS@$REPO_HOST" /tmp/jsn-config
-            - cp /tmp/jsn-config/Dockerfile .
+            - git clone "https://$REPO_USER:$REPO_PASS@$REPO_HOST" /tmp/beaverdam-config
+            - cp /tmp/beaverdam-config/Dockerfile .
         build:
           commands:
             - IMAGE_TAG=$(date +%Y%m%d-%H%M%S)

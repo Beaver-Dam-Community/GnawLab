@@ -7,5 +7,5 @@ variable "aws_region" {
 variable "project_name" {
   description = "Project name prefix for all resources"
   type        = string
-  default     = "jsn"
+  default     = "beaverdam"
 }

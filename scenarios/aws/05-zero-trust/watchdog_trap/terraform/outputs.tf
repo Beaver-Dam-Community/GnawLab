@@ -1,6 +1,6 @@
 # ── Information provided to participants ──────────────────────────────────────────────────────────────
 output "webapp_url" {
-  description = "JSN Incident Report Generator URL for participants"
+  description = "BeaverDam Incident Report Generator URL for participants"
   value       = "http://${aws_eip.webapp.public_ip}"
 }
 

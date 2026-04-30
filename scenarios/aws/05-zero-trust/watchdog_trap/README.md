@@ -1,67 +1,90 @@
-# Scenario: Watchdog Trap
+# Watchdog Trap
 
-**Difficulty:** Medium
-**Estimated Time:** 90 min
-**Category:** zero-trust/multi-hop
+**Difficulty:** Hard  
+**Estimated Time:** 90 min  
+**Category:** multi-hop
 
 ## Overview
 
-JSN Corp's DevOps team operates Prowler and Steampipe dashboards for internal cloud security monitoring. These tools are designed to be accessible only from within the internal network, but a publicly exposed incident report web application contains a critical vulnerability. As a security assessor, you must exploit this vulnerability to pivot into the internal network, abuse the security tools themselves to collect sensitive credentials, and ultimately hijack the CI/CD pipeline to obtain the FLAG deployed in an ECS container.
+**BeaverDam Corp.** operates an internal security monitoring platform — Prowler and Steampipe dashboards — accessible only within the corporate VPC. An internet-facing incident report generation web app serves as the entry point.
 
-This scenario is based on real-world CI/CD supply chain attack patterns. Hardcoded credentials in CodeBuild buildspec files exposed as plaintext in CloudWatch logs is a repeatedly observed vulnerability in enterprise environments.
+During a routine external assessment, you discover a critical vulnerability in the web application. Exploit it to pivot into the internal network, abuse the security tooling itself to exfiltrate CI/CD pipeline credentials, hijack the deployment pipeline, and capture the flag planted inside the production container.
+
+### References
+
+- **SolarWinds Supply Chain Attack (2020)** - Compromised build pipeline delivered malicious updates to 18,000+ organizations
+  - [CISA: SolarWinds and Active Exploitation of Orion Software](https://www.cisa.gov/news-events/news/cisa-issues-emergency-directive-mitigate-compromise-solarwinds-orion-network)
+- **CircleCI Security Incident (2022)** - Malware on employee laptop → session token theft → customer secrets compromised
+  - [CircleCI Incident Report](https://circleci.com/blog/jan-4-2023-incident-report/)
+- **Codecov Bash Uploader Attack (2021)** - Compromised CI script uploaded credentials from environment to attacker server
+  - [Codecov Security Alert](https://about.codecov.io/security-update/)
+- MITRE ATT&CK: [T1190 - Exploit Public-Facing Application](https://attack.mitre.org/techniques/T1190/)
+- MITRE ATT&CK: [T1059.004 - Command and Scripting Interpreter: Unix Shell](https://attack.mitre.org/techniques/T1059/004/)
+- MITRE ATT&CK: [T1552.001 - Unsecured Credentials: Credentials In Files](https://attack.mitre.org/techniques/T1552/001/)
+- MITRE ATT&CK: [T1195.002 - Supply Chain Compromise: Compromise Software Supply Chain](https://attack.mitre.org/techniques/T1195/002/)
+
+## Learning Objectives
+
+- Identify and exploit Server-Side Template Injection (SSTI) vulnerabilities in Flask/Jinja2
+- Pivot into internal networks using RCE from SSTI
+- Enumerate internal services and extract credentials from CI/CD pipeline logs
+- Understand how overprivileged CodeBuild buildspecs leak plaintext credentials to CloudWatch
+- Manipulate a CodeCommit repository and trigger a CodePipeline to deploy a backdoored container
 
 ## Scenario Resources
 
-- VPC x 1 (6 subnets: public / private / tools)
-- EC2 x 3
-  - `webapp`: JSN Incident Report Generator (internet-facing, EIP)
-  - `prowler`: Security compliance dashboard (internal only, port 9090)
-  - `steampipe`: SQL query console (internal only, port 9194)
-- ALB x 1 (Blue/Green deployment)
-- ECS Fargate x 1 (`jsn-app`, FLAG injected as environment variable)
-- CodePipeline x 1 (Source → Build → Deploy)
-- CodeBuild x 1 (Docker image build + ECR push)
-- CodeDeploy x 1 (ECS Blue/Green)
-- CodeCommit x 1 (`jsn-config` repository)
-- ECR x 1 (`jsn-app` image)
-- S3 x 1 (pipeline artifact bucket)
-- CloudWatch Log Group x 1 (`/corp/deploy-pipeline`)
-- Secrets Manager x 1 (FLAG storage)
-
-## Setup
-
-See [setup.md](./setup.md) for deployment instructions.
-
-> **Note:** This scenario creates real AWS resources that may incur costs.
+- 1 VPC with public, private, and tools subnets
+- 3 EC2 Instances:
+  - `webapp`: BeaverDam Incident Report Generator (internet-facing, Elastic IP)
+  - `prowler`: Internal security dashboard (private subnet, port 9090)
+  - `steampipe`: Cloud SQL console (private subnet, port 9194)
+- 1 Application Load Balancer (Blue/Green deployment target)
+- 1 ECS Fargate service (production app with FLAG injected via Secrets Manager)
+- 1 CodePipeline (Source → Build → Deploy)
+- 1 CodeBuild project (Docker image build with hardcoded Git credentials in buildspec)
+- 1 CodeDeploy application (ECS Blue/Green)
+- 1 CodeCommit repository (`beaverdam-config`)
+- 1 ECR repository
+- 1 S3 bucket (pipeline artifacts)
+- 1 CloudWatch Log Group (`/corp/deploy-pipeline`)
+- 1 Secrets Manager secret (FLAG)
 
 ## Starting Point
 
-You will receive only one piece of information:
-
-- **Web Application URL**: `http://<webapp_ip>` (JSN Incident Report Generator)
+URL to the incident report web application:
+- `http://<webapp-public-ip>`
 
 ## Goal
 
-Obtain the FLAG value from inside the ECS container.
+Capture the flag deployed inside the ECS container via reverse shell.
 
+## Setup & Cleanup
+
+- [setup.md](./setup.md) - Deploy scenario infrastructure
+- [cleanup.md](./cleanup.md) - Remove all resources
+
+> **Warning:** This scenario creates real AWS resources that may incur costs (~$0.50-1.00/hour). Always run `terraform destroy` when finished.
+
+## Walkthrough
+
+```mermaid
+flowchart TB
+    A[BeaverDam Incident Report Generator] --> B[SSTI Discovery\n7×7 = 49]
+    B --> C[RCE via Jinja2\nconfig.__class__.__init__.__globals__]
+    C --> D[Internal Network Recon\nip addr + port scan]
+    D --> E[Prowler Dashboard\nport 9090]
+    D --> F[Steampipe SQL Console\nport 9194]
+    E --> G[CloudWatch KMS FAIL\nlog group: /corp/deploy-pipeline]
+    G --> F
+    F --> H[SQL Query CloudWatch Logs\naws_cloudwatch_log_event]
+    H --> I[Git Credentials Extracted\nCloning https://dev-user:PASSWORD@codecommit]
+    I --> J[CodeCommit Clone\nbeaverdam-config repo]
+    J --> K[task-definition.json Injection\nbash reverse shell command]
+    K --> L[git push main\nCodePipeline auto-triggers]
+    L --> M[ECS Blue/Green Deployment\n~5-10 min]
+    M --> N[Reverse Shell Connected\nnc -lvnp PORT]
+    N --> O[echo $FLAG]
+    O --> P[FLAG]
 ```
-FLAG{...}
-```
 
-## Infrastructure Architecture
-
-![Architecture](assets/watchdog_trap_architecture.drawio)
-
-## Real-world Reference
-
-> CircleCI breach (2022) & SolarWinds supply chain attack (2020) — hardcoded credentials in CI/CD pipelines exposed via log leakage, enabling pipeline hijacking and downstream compromise.
-
-## Cleanup
-
-When finished, see [cleanup.md](./cleanup.md) to remove all resources.
-
-> **Warning:** Always verify cleanup to avoid unexpected AWS costs.
-
----
-
-For detailed walkthrough, see [walkthrough.md](./walkthrough.md)
+See [walkthrough.md](./walkthrough.md) for detailed exploitation steps.

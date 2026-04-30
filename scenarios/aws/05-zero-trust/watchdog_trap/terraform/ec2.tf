@@ -1,4 +1,4 @@
-# ── JSN Incident Report Generator (webapp) ───────────────────────────────────
+# ── BeaverDam Incident Report Generator (webapp) ─────────────────────────────
 # Sole external entry point. No IAM Instance Profile. Exposed externally via EIP.
 # [Intentional Vulnerability] Server-Side Template Injection (SSTI) — Summary field
 
@@ -21,9 +21,9 @@ resource "aws_instance" "webapp" {
     pip3 install flask
 
     useradd -m -s /bin/bash webapp
-    mkdir -p /opt/jsn-report
+    mkdir -p /opt/beaverdam-report
 
-    cat > /opt/jsn-report/app.py << 'PYEOF'
+    cat > /opt/beaverdam-report/app.py << 'PYEOF'
     from flask import Flask, request, render_template_string
 
     app = Flask(__name__)
@@ -32,7 +32,7 @@ resource "aws_instance" "webapp" {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <title>JSN Incident Report Generator</title>
+      <title>BeaverDam Incident Report Generator</title>
       <style>
         body{font-family:monospace;background:#0d1117;color:#c9d1d9;margin:0;padding:2rem}
         h2{color:#58a6ff}
@@ -48,11 +48,11 @@ resource "aws_instance" "webapp" {
       </style>
     </head>
     <body>
-      <h2>JSN Incident Report Generator</h2>
+      <h2>BeaverDam Incident Report Generator</h2>
       <p style="color:#8b949e;font-size:.85rem">Generates internal incident reports for sharing during outages.</p>
       <form method="post">
         <label>Service Name</label>
-        <input type="text" name="service" placeholder="e.g. jsn-payment-api">
+        <input type="text" name="service" placeholder="e.g. beaverdam-api">
         <label>Incident Time</label>
         <input type="text" name="incident_time" placeholder="e.g. 2026-04-30 14:23">
         <label>Owner</label>
@@ -80,7 +80,7 @@ resource "aws_instance" "webapp" {
             # All other fields are safely handled as Jinja2 variables
             # ──────────────────────────────────────────────────────────
             report_template = (
-                "[JSN Incident Report]\n"
+                "[BeaverDam Incident Report]\n"
                 "Service  : {{ service }}\n"
                 "Time     : {{ incident_time }}\n"
                 "Owner    : {{ owner }}\n"
@@ -98,20 +98,20 @@ resource "aws_instance" "webapp" {
         app.run(host='0.0.0.0', port=80)
     PYEOF
 
-    chown -R webapp:webapp /opt/jsn-report
+    chown -R webapp:webapp /opt/beaverdam-report
 
-    tee /etc/systemd/system/jsn-report.service > /dev/null << 'SERVICE'
+    tee /etc/systemd/system/beaverdam-report.service > /dev/null << 'SERVICE'
     [Unit]
-    Description=JSN Incident Report Generator
+    Description=BeaverDam Incident Report Generator
     After=network.target
 
     [Service]
     Type=simple
     User=webapp
-    WorkingDirectory=/opt/jsn-report
+    WorkingDirectory=/opt/beaverdam-report
     AmbientCapabilities=CAP_NET_BIND_SERVICE
     CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-    ExecStart=/usr/bin/python3 /opt/jsn-report/app.py
+    ExecStart=/usr/bin/python3 /opt/beaverdam-report/app.py
     Restart=on-failure
     RestartSec=5
 
@@ -120,8 +120,8 @@ resource "aws_instance" "webapp" {
     SERVICE
 
     systemctl daemon-reload
-    systemctl enable jsn-report
-    systemctl start jsn-report
+    systemctl enable beaverdam-report
+    systemctl start beaverdam-report
   USERDATA
   )
 
@@ -166,7 +166,7 @@ resource "aws_instance" "prowler" {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>Prowler Security Report - JSN AWS Environment</title>
+      <title>Prowler Security Report - BeaverDam AWS Environment</title>
       <style>
         body{font-family:monospace;background:#111827;color:#d1d5db;padding:2rem}
         h1{color:#60a5fa}
@@ -176,7 +176,7 @@ resource "aws_instance" "prowler" {
       </style>
     </head>
     <body>
-      <h1>Prowler Security Report - JSN AWS Environment</h1>
+      <h1>Prowler Security Report - BeaverDam AWS Environment</h1>
       <div class="summary">SUMMARY: PASS 142 / FAIL 7 / WARNING 3</div>
       <div class="finding">
         <div class="fail">[MEDIUM] cloudwatch_log_group_kms_encryption_enabled</div>
@@ -263,8 +263,8 @@ resource "aws_instance" "steampipe" {
     # Install Flask web app
     pip3 install flask psycopg2-binary
 
-    mkdir -p /opt/jsn-query
-    cat > /opt/jsn-query/app.py << 'PYEOF'
+    mkdir -p /opt/beaverdam-query
+    cat > /opt/beaverdam-query/app.py << 'PYEOF'
     import re
     from flask import Flask, request, jsonify, render_template_string
     import psycopg2
@@ -284,7 +284,7 @@ resource "aws_instance" "steampipe" {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <title>JSN Security Analysis</title>
+      <title>BeaverDam Security Analysis</title>
       <style>
         body{font-family:monospace;background:#1e1e1e;color:#d4d4d4;padding:2rem}
         h2{color:#569cd6}
@@ -300,7 +300,7 @@ resource "aws_instance" "steampipe" {
       </style>
     </head>
     <body>
-      <h2>JSN Security Analysis - SQL Query Console</h2>
+      <h2>BeaverDam Security Analysis - SQL Query Console</h2>
       <textarea id="sql" placeholder="-- Enter SQL here
     select * from aws_cloudwatch_log_group limit 10;"></textarea><br>
       <button onclick="runQuery()">Run Query &#9654;</button>
@@ -354,7 +354,7 @@ resource "aws_instance" "steampipe" {
         app.run(host='0.0.0.0', port=9194)
     PYEOF
 
-    chown -R ubuntu:ubuntu /opt/jsn-query
+    chown -R ubuntu:ubuntu /opt/beaverdam-query
 
     # Steampipe service (systemd unit)
     tee /etc/systemd/system/steampipe-service.service > /dev/null << 'SERVICE'
@@ -374,16 +374,16 @@ resource "aws_instance" "steampipe" {
     SERVICE
 
     # Flask web app (systemd unit)
-    tee /etc/systemd/system/jsn-query-web.service > /dev/null << 'SERVICE'
+    tee /etc/systemd/system/beaverdam-query-web.service > /dev/null << 'SERVICE'
     [Unit]
-    Description=JSN SQL Query Web App
+    Description=BeaverDam SQL Query Web App
     After=network.target steampipe-service.service
 
     [Service]
     Type=simple
     User=ubuntu
-    WorkingDirectory=/opt/jsn-query
-    ExecStart=/usr/bin/python3 /opt/jsn-query/app.py
+    WorkingDirectory=/opt/beaverdam-query
+    ExecStart=/usr/bin/python3 /opt/beaverdam-query/app.py
     Restart=on-failure
     RestartSec=10
 
@@ -392,11 +392,11 @@ resource "aws_instance" "steampipe" {
     SERVICE
 
     systemctl daemon-reload
-    systemctl enable steampipe-service jsn-query-web
+    systemctl enable steampipe-service beaverdam-query-web
     systemctl start steampipe-service
     # Flask starts after the steampipe service is up
     sleep 15
-    systemctl start jsn-query-web
+    systemctl start beaverdam-query-web
   USERDATA
   )
 

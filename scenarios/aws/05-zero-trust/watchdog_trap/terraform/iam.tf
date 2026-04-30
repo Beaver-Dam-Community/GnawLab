@@ -27,7 +27,7 @@ resource "aws_iam_user_policy" "dev_user_codecommit" {
           "codecommit:GitPull",
           "codecommit:GitPush"
         ]
-        # Scoped to jsn-config repo only — no access to other repositories
+        # Scoped to beaverdam-config repo only — no access to other repositories
         Resource = local.codecommit_repo_arn
       }
     ]

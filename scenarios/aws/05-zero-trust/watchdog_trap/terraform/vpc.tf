@@ -153,10 +153,10 @@ resource "aws_route_table_association" "private_b" {
 
 # ── Security Groups ─────────────────────────────────────────────────────────────
 
-# webapp-sg — JSN Incident Report Generator (sole external entry point)
+# webapp-sg — BeaverDam Incident Report Generator (sole external entry point)
 resource "aws_security_group" "webapp" {
   name        = "${var.project_name}-webapp-sg"
-  description = "External access for JSN Incident Report Generator SSTI RCE entrypoint"
+  description = "External access for BeaverDam Incident Report Generator SSTI RCE entrypoint"
   vpc_id      = aws_vpc.main.id
 
   ingress {

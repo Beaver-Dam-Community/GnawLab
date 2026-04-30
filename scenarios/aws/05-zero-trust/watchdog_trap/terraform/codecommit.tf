@@ -1,6 +1,6 @@
 resource "aws_codecommit_repository" "config" {
   repository_name = "${var.project_name}-config"
-  description     = "Repository for JSN ECS deployment configuration files"
+  description     = "Repository for BeaverDam ECS deployment configuration files"
 
   tags = { Name = "${var.project_name}-config" }
 }
