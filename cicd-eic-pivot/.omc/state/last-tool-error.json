@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"which terraform || find /usr/local /opt /Users/cityll -name \\\"terraform\\\" -type f 2>/dev/null | head -5 || brew list terraform 2>/dev/null && ls /opt/homebrew/bin/terraform 2>/dev/null\",\"d...",
-  "error": "Exit code 1\nterraform not found\n/Users/cityll/.gem/gems/rouge-3.30.0/lib/rouge/demos/terraform\n/Users/cityll/.gem/gems/rouge-4.6.1/lib/rouge/demos/terraform",
-  "timestamp": "2026-04-30T11:22:13.559Z",
-  "retry_count": 2
-}
