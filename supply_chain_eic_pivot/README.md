@@ -23,7 +23,7 @@ Starting from a GitLab developer account, players must poison the CI/CD pipeline
 - **T1021.004 - Remote Services: SSH**
   - [MITRE ATT&CK: T1021.004](https://attack.mitre.org/techniques/T1021/004/)
 - **Poisoned Pipeline Execution (PPE)** — Research on abusing CI/CD pipeline permissions to inject malicious code and execute commands in build environments
-  - [Palo Alto Unit 42: Poisoned Pipeline Execution](https://unit42.paloaltonetworks.com/cicd-pipeline-attacks/)
+  - [Cider Security: Poisoned Pipeline Execution](https://www.cidersecurity.io/blog/research/poisoned-pipeline-execution-understanding-an-emerging-attack-vector/)
 - **Atlantis Security Best Practices** — Official guidance on why `autoplan.enabled: true` without plan approval creates an unauthenticated code execution vector
   - [Atlantis Docs: Security](https://www.runatlantis.io/docs/security.html)
 
@@ -62,7 +62,7 @@ Read the contents of `/home/ubuntu/flag.txt` on the Target Server in the private
 
 ## Infrastructure Architecture
 
-![Architecture](architecture.png)
+![Architecture](images/architecture.png)
 
 ## Real-world Reference
 
