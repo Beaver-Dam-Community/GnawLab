@@ -1,60 +1,161 @@
-# supply_chain_eic_pivot — Setup
+# Supply Chain EIC Pivot - Setup Guide
 
 ## Prerequisites
 
-- AWS CLI configured with credentials that have sufficient permissions to create EC2, VPC, IAM, and SSM resources
-- Terraform >= 1.5.0 installed
-- Your public IP address (for `cg_whitelist`)
+- [Terraform](https://www.terraform.io/downloads) >= 1.5.0
+- [AWS CLI](https://aws.amazon.com/cli/) v2
+- AWS Account with admin access (for resource creation)
+- AWS CLI profile `GnawLab` configured with admin credentials
 
-## Deploy the Scenario
+## Step 1: Configure AWS CLI Profile
+
+If you haven't already, configure the `GnawLab` profile with your admin credentials:
+
+```bash
+aws configure --profile GnawLab
+```
+
+Enter your admin credentials:
+- AWS Access Key ID: `<your-admin-access-key>`
+- AWS Secret Access Key: `<your-admin-secret-key>`
+- Default region name: `us-east-1`
+- Default output format: `json`
+
+Verify the profile works:
+
+```bash
+aws sts get-caller-identity --profile GnawLab
+```
+
+## Step 2: Navigate to Terraform Directory
 
 ```bash
 cd terraform
-terraform init
-terraform plan -var='cg_whitelist=["<YOUR_PUBLIC_IP>/32"]'
-terraform apply -var='cg_whitelist=["<YOUR_PUBLIC_IP>/32"]'
 ```
 
-To find your public IP:
+## Step 3: Initialize Terraform
 
 ```bash
-curl -s https://checkip.amazonaws.com
+terraform init
 ```
 
-## Deployment Timeline
+## Step 4: Review the Plan
 
-| Time | Event |
-|---|---|
-| 0 min | Terraform finishes — all EC2 instances are running |
-| ~1 min | Bastion and Target Server are fully configured |
-| ~5 min | Atlantis service starts polling SSM for GitLab token |
-| ~10–15 min | GitLab CE finishes initializing |
-| ~15–20 min | Atlantis connects to GitLab — scenario is fully ready |
-
-> **Note:** GitLab CE installation is the bottleneck. Wait until you can access the GitLab UI in your browser before starting.
-
-## Starting Credentials
-
-After deployment, your starting credentials are automatically written to:
-
-```
-assets/gitlab_credentials.txt
+```bash
+terraform plan -var="gn_whitelist=[\"$(curl -s https://checkip.amazonaws.com)/32\"]"
 ```
 
-You can also retrieve the GitLab URL from Terraform outputs:
+Review the resources that will be created:
+- 1 VPC with public and private subnets
+- 1 Internet Gateway and Route Tables
+- 4 Security Groups (GitLab, Bastion/Atlantis, Target)
+- 1 GitLab CE server (t3.large) with `infra-repo` pre-configured
+- 1 Atlantis server (t3.micro) connected to GitLab via webhook
+- 1 Bastion Host (t3.micro) in the public subnet
+- 1 Target Server (t3.micro) in the private subnet
+- 3 IAM Roles and Instance Profiles
+- 1 SSM Parameter for the GitLab service token
+
+## Step 5: Deploy the Scenario
+
+The `gn_whitelist` variable controls which IP addresses can reach GitLab and Atlantis. The command below auto-detects your current public IP:
+
+```bash
+terraform apply -var="gn_whitelist=[\"$(curl -s https://checkip.amazonaws.com)/32\"]"
+```
+
+Type `yes` when prompted.
+
+> **Note:** Deployment takes 3–5 minutes for Terraform to complete. GitLab CE requires an additional 15–20 minutes to fully initialize after the EC2 instance starts. Do not attempt to log in until the GitLab UI is accessible in your browser.
+
+## Step 6: Wait for GitLab to Initialize
+
+GitLab CE is the bottleneck. The instance runs a setup script on first boot that installs and configures GitLab, creates the `000_ops` account, seeds `infra-repo`, and registers the Atlantis webhook. This takes approximately 15–20 minutes.
+
+You can monitor progress via SSM Session Manager:
+
+```bash
+aws ssm start-session --target <GITLAB_INSTANCE_ID> --profile GnawLab
+sudo tail -f /var/log/setup-gitlab.log
+```
+
+## Step 7: Get the Starting Point
 
 ```bash
 terraform output gitlab_server_url
-terraform output instructions
 ```
 
-## Verify the Scenario is Ready
+Example output:
+```
+"http://3.92.XXX.XXX"
+```
 
-1. Open the GitLab URL in your browser — the login page should appear
+## Step 8: Verify the Scenario is Ready
+
+Once GitLab is accessible, confirm the following before starting:
+
+1. Open `http://<GITLAB_IP>` in your browser — the GitLab login page should appear
 2. Log in as `000_ops` with password `BeaverPassword123!`
 3. Confirm `infra-repo` exists and contains `main.tf`, `variables.tf`, and `atlantis.yaml`
-4. Confirm Atlantis webhook is registered: `infra-repo → Settings → Webhooks`
+4. Confirm the Atlantis webhook is registered: navigate to `infra-repo → Settings → Webhooks` and verify a webhook pointing to the Atlantis server is present
 
----
+The scenario is ready when all four checks pass.
 
-You are now ready to begin. See [README.md](./README.md) for scenario details.
+## Step 9: Start the Challenge!
+
+Explore the repository and find the misconfiguration. Your goal is to read `/home/ubuntu/flag.txt` from the Target Server in the private subnet.
+
+Now find the flag! See [walkthrough.md](./walkthrough.md) if you need hints.
+
+## Configuration Options
+
+Create `terraform.tfvars` for custom settings:
+
+```hcl
+# Optional: Specify your IP manually instead of auto-detecting
+gn_whitelist = ["YOUR.PUBLIC.IP/32"]
+
+# Optional: Use a different AWS region
+region = "us-west-2"
+
+# Optional: Custom identifier for resource naming
+beaver_id = "my-custom-id"
+```
+
+## Troubleshooting
+
+### GitLab not loading after 20 minutes
+
+Check the setup log via SSM:
+
+```bash
+aws ssm start-session --target <GITLAB_INSTANCE_ID> --profile GnawLab
+sudo tail -50 /var/log/setup-gitlab.log
+```
+
+Look for errors in the GitLab reconfigure step. Common causes are insufficient memory (the instance must be `t3.large` or larger) and DNS resolution failures.
+
+### Atlantis not triggering on Merge Requests
+
+Test the webhook manually from the GitLab UI: navigate to `infra-repo → Settings → Webhooks`, find the Atlantis webhook, and click **Test → Push events**. A `200 OK` response confirms connectivity. If the test fails, verify the Atlantis server security group allows inbound traffic from the GitLab server's private IP.
+
+### IP address changed since deployment
+
+Re-apply with your current IP to update the security group whitelist:
+
+```bash
+terraform apply -var="gn_whitelist=[\"$(curl -s https://checkip.amazonaws.com)/32\"]"
+```
+
+## Cost Estimate
+
+| Resource | Instance Type | Estimated Cost |
+|---|---|---|
+| GitLab server | t3.large | ~$0.08/hour |
+| Atlantis server | t3.micro | ~$0.01/hour |
+| Bastion Host | t3.micro | ~$0.01/hour |
+| Target Server | t3.micro | ~$0.01/hour |
+
+**Estimated total: ~$0.11/hour**
+
+Always run `terraform destroy` when finished to avoid charges.

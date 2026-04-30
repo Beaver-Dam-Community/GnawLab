@@ -27,7 +27,7 @@ resource "aws_security_group" "gitlab_sg" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = var.cg_whitelist
+    cidr_blocks = var.gn_whitelist
   }
 
   # Allow Atlantis runner to call GitLab API internally
@@ -42,7 +42,7 @@ resource "aws_security_group" "gitlab_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = var.cg_whitelist
+    cidr_blocks = var.gn_whitelist
   }
 
   egress {
@@ -66,7 +66,7 @@ resource "aws_security_group" "bastion_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = var.cg_whitelist
+    cidr_blocks = var.gn_whitelist
   }
 
   # Allow GitLab to deliver webhooks to Atlantis

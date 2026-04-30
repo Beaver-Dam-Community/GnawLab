@@ -34,7 +34,7 @@ variable "private_subnet_cidr" {
   default     = "10.0.2.0/24"
 }
 
-variable "cg_whitelist" {
+variable "gn_whitelist" {
   description = "List of trusted CIDR blocks allowed to access public-facing resources"
   type        = list(string)
   default     = []
