@@ -198,6 +198,28 @@ kay_email           = "kay@digitalcs.example.com"
 owner_email         = "owner@fitmall.example.com"
 ```
 
+## Re-running, parallel runs, and destroy semantics
+
+The Terraform module is built to be **idempotent** — you can re-apply on top
+of a partial state, run multiple copies of the scenario in the same AWS
+account, and destroy from any state without scripts:
+
+- `random_string.scenario_id` (8 lowercase alphanumeric chars) is generated on
+  first apply and pinned in `terraform.tfstate`. Every globally / regionally
+  unique name (`aws_s3_bucket`, `aws_iam_role`, `aws_cognito_user_pool`,
+  `aws_bedrockagent_*`, `aws_opensearchserverless_collection`, KMS alias, …)
+  is suffixed with this id. **Re-applying never recreates these resources.**
+- Two parallel deployments? `cp -r terraform terraform-second && cd
+  terraform-second && terraform init && terraform apply`. The second copy
+  generates its own `scenario_id` and lives alongside the first without name
+  collisions.
+- `terraform destroy` is self-contained: `bedrock.tf` ships
+  `null_resource.predestroy_kb_jobs` and `null_resource.predestroy_workspace_bucket`,
+  which run on destroy *before* their parent resources and respectively
+  cancel any `IN_PROGRESS` Bedrock KB ingestion job and purge versioned
+  objects + delete markers from the workspace bucket. You should not need
+  the manual checklist in [cleanup.md](./cleanup.md) under normal conditions.
+
 ## Troubleshooting
 
 ### "AccessDeniedException: You don't have access to the model" during apply

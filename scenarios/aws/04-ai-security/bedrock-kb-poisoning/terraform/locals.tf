@@ -1,3 +1,13 @@
+// Per-deployment random suffix used in every globally / regionally unique
+// resource name (S3 bucket, OpenSearch collection, IAM role, KMS alias, ...).
+//
+// - Stable inside a single Terraform state, so re-`apply` after partial failure
+//   keeps existing resources and does not try to recreate them.
+// - A fresh `terraform init` directory always gets a new id, so the same
+//   AWS account/region can host multiple parallel deployments of this
+//   scenario without name collisions.
+// - No `keepers {}` on purpose: nothing should ever force a regeneration of
+//   this id while the stack is alive.
 resource "random_string" "scenario_id" {
   length  = 8
   special = false

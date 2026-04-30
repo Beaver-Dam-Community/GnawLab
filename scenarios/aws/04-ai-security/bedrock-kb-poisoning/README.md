@@ -110,11 +110,19 @@ FLAG{<customer_id>}
 - [setup.md](./setup.md) — deploy scenario infrastructure (Ubuntu / WSL2 + AWS CLI v2)
 - [cleanup.md](./cleanup.md) — remove all resources
 
+> **Self-contained & repeatable.** Every globally / regionally unique resource
+> name is suffixed with a per-deployment 8-char `scenario_id` (a `random_string`
+> generated on first `terraform apply`), so the same AWS account can host
+> multiple parallel deployments of this scenario without name collisions. The
+> Terraform module also carries destroy-time hooks (`null_resource` with
+> `when = destroy`) that cancel in-flight Bedrock KB ingestion jobs and purge
+> the versioned workspace bucket, so `terraform destroy` is a single command
+> from any state — no manual pre-destroy script required.
+
 > **Warning:** This scenario creates real AWS resources (Bedrock Agent + Knowledge
 > Base, OpenSearch Serverless collection, CloudFront distribution, NAT-free VPC
 > endpoints). Estimated cost: **~$0.80 / hour idle, ~$2 / hour during walkthrough**.
-> Always run `terraform destroy` when finished. See [cleanup.md](./cleanup.md) for
-> the required Bedrock-Agent pre-destroy steps.
+> Always run `terraform destroy` when finished. See [cleanup.md](./cleanup.md).
 
 ## Walkthrough
 
