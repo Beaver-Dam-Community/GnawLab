@@ -6,9 +6,11 @@
 
 ## Overview
 
-**BeaverOps Corp.** runs GitLab CE as its internal source control platform and Atlantis as an automated Terraform runner. To streamline infrastructure delivery, the team set `autoplan.enabled: true` in `atlantis.yaml` with no approval gate on plan — meaning any Merge Request that touches a `.tf` file triggers a live `terraform plan` on the Atlantis runner with full IAM access. The runner pulls instance credentials directly from IMDSv1 with no token requirement.
+**BeaverOps Corp.** uses GitLab CE for source control and Atlantis for automated Terraform runs. A routine audit of third-party developer tooling revealed that a malicious package in the internal developer environment had silently exfiltrated a GitLab developer account's credentials (`000_ops`) to an external server — a textbook software supply chain compromise.
 
-Starting from a GitLab developer account, players must poison the CI/CD pipeline to exfiltrate IAM credentials, use a legitimate AWS API to inject SSH access onto the Bastion Host, and pivot into an isolated private subnet to retrieve the flag.
+With those leaked credentials in hand, the attacker discovers a critical CI/CD misconfiguration: `autoplan.enabled: true` in `atlantis.yaml` with no approval gate on plan. Any Merge Request touching a `.tf` file triggers a live `terraform plan` on the Atlantis runner with full IAM access. The runner pulls instance credentials directly from IMDSv1 with no token requirement.
+
+Starting from the leaked GitLab developer account, players must poison the CI/CD pipeline to exfiltrate IAM credentials, use a legitimate AWS API to inject SSH access onto the Bastion Host, and pivot into an isolated private subnet to retrieve the flag.
 
 ### References
 
