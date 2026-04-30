@@ -1,0 +1,16 @@
+name: watchdog_trap
+author: JSN Security Lab
+version: 1.0.0
+difficulty: Medium
+estimated_time: 90min
+last_updated: 05-01-2026
+description: |
+  Exploit SSTI on a public-facing web app to pivot into internal security monitoring tools,
+  steal CI/CD credentials from CloudWatch logs, and hijack the deployment pipeline to
+  obtain the FLAG from an ECS container.
+techniques:
+  - Server-Side Template Injection (SSTI)
+  - Internal network pivoting
+  - CloudWatch log credential exposure
+  - CI/CD pipeline hijacking
+  - ECS task definition tampering
