@@ -1,69 +1,48 @@
 # Beginner
 
-Foundational cloud attack scenarios for learning privilege escalation and lateral movement in AWS environments. These scenarios focus on understanding attack "hops" and permission "combos" without complex initial access vectors.
+Foundational cloud attack scenarios for learning privilege escalation and lateral movement in AWS environments. Each scenario is based on real-world incidents or documented security research.
 
-## Sector 1: Access Key Based Attacks
+## Classification
 
-Starting with long-term credentials (AKIA...), learn to exploit IAM misconfigurations.
+| Category | Definition | Example |
+|----------|------------|---------|
+| **Single Hop** | One entry point → direct path to target (no pivot) | Leaked creds → S3 |
+| **Single Hop Combo** | One entry point → traverse multiple services → target | SSRF → IMDS → IAM → S3 |
+| **Multi Hop** | Exploit A grants access to discover/exploit B | SQLi → creds → SSRF → ... |
+| **Multi Hop Combo** | Multi Hop + multiple permissions at each stage | Complex privilege escalation chains |
 
-### Single Hop
+## Single Hop
 
-| Scenario | Description | Difficulty |
-|----------|-------------|------------|
-| [s3-enum-exfil](./access-key/single-hop/s3-enum-exfil/) | Enumerate and exfiltrate data from misconfigured S3 buckets | Easy |
-| [policy-version-rollback](./access-key/single-hop/policy-version-rollback/) | Rollback to a vulnerable IAM policy version for privilege escalation | Easy |
-| [self-attachment](./access-key/single-hop/self-attachment/) | Attach admin policy to your own user | Easy |
+One entry point, direct path to target without pivoting through other services.
 
-### Single Hop Combo
+| Scenario | Description | Difficulty | Reference |
+|----------|-------------|------------|-----------|
+| [s3-data-heist](./01-single-hop/s3-data-heist/) | Enumerate and exfiltrate data from S3 | Easy | Uber 2016 |
 
-| Scenario | Description | Difficulty |
-|----------|-------------|------------|
-| [ebs-volume-theft](./access-key/single-hop-combo/ebs-volume-theft/) | Create EC2 and attach target EBS volume to exfiltrate data | Medium |
-| [backdoor-iam-user](./access-key/single-hop-combo/backdoor-iam-user/) | Create backdoor IAM user with admin privileges | Medium |
-| [rds-snapshot-restore](./access-key/single-hop-combo/rds-snapshot-restore/) | Restore RDS snapshot and reset master password | Medium |
+## Single Hop Combo
 
-### Multi Hop
+One entry point, but traverse multiple AWS services to reach the target.
 
-| Scenario | Description | Difficulty |
-|----------|-------------|------------|
-| [overprivileged-assume-role](./access-key/multi-hop/overprivileged-assume-role/) | Assume an overprivileged role via misconfigured trust policy | Medium |
-| [terraform-state-exposure](./access-key/multi-hop/terraform-state-exposure/) | Extract SSH keys from exposed terraform.tfstate in S3 | Medium |
-| [ssm-session-manager](./access-key/multi-hop/ssm-session-manager/) | Gain EC2 shell access via SSM Session Manager | Medium |
+| Scenario | Description | Difficulty | Reference |
+|----------|-------------|------------|-----------|
+| [ebs-snapshot-theft](./02-single-hop-combo/ebs-snapshot-theft/) | Create EC2 and attach snapshot to exfiltrate data | Medium | Datadog Labs |
+| [policy-rollback](./02-single-hop-combo/policy-rollback/) | Rollback to a vulnerable IAM policy version | Medium | CloudGoat |
+| [metadata-pivot](./02-single-hop-combo/metadata-pivot/) | SSRF → IMDS → S3 data exfiltration | Medium | Capital One 2019 |
+| [secrets-extraction](./02-single-hop-combo/secrets-extraction/) | Command injection → ECS metadata → Secrets Manager | Medium | LexisNexis 2025 |
 
-### Multi Hop Combo
+## Multi Hop
 
-| Scenario | Description | Difficulty |
-|----------|-------------|------------|
-| [ec2-passrole-userdata](./access-key/multi-hop-combo/ec2-passrole-userdata/) | Launch EC2 with admin role and reverse shell via UserData | Hard |
-| [lambda-passrole](./access-key/multi-hop-combo/lambda-passrole/) | Modify Lambda function code and attach high-privilege role | Hard |
-| [cicd-pipeline-poisoning](./access-key/multi-hop-combo/cicd-pipeline-poisoning/) | Poison CI/CD pipeline to deploy malicious container | Hard |
+Chain of exploits where each vulnerability grants access to discover or exploit the next.
 
-## Sector 2: Role Based Attacks
+| Scenario | Description | Difficulty | Reference |
+|----------|-------------|------------|-----------|
+| [credential-chain](./03-multi-hop/credential-chain/) | Chain credentials across services to escalate | Hard | Sysdig TRT 2025 |
 
-Exploiting temporary credentials (ASIA...) and IAM trust policy misconfigurations.
+## Multi Hop Combo
 
-### Single Hop
+Complex attack chains with multiple permissions leveraged at each hop.
 
-| Scenario | Description | Difficulty |
-|----------|-------------|------------|
-| [public-role-takeover](./role/single-hop/public-role-takeover/) | Assume a publicly accessible role with "AWS": "*" principal | Easy |
-| [confused-deputy](./role/single-hop/confused-deputy/) | Exploit missing ExternalId validation in cross-account role | Medium |
-
-### Single Hop Combo
-
-| Scenario | Description | Difficulty |
-|----------|-------------|------------|
-| [cognito-unauth-role](./role/single-hop-combo/cognito-unauth-role/) | Obtain AWS credentials via misconfigured Cognito Identity Pool | Medium |
-| [imdsv2-ssrf](./role/single-hop-combo/imdsv2-ssrf/) | Bypass IMDSv2 protection via SSRF to steal role credentials | Hard |
-
-### Multi Hop
-
-| Scenario | Description | Difficulty |
-|----------|-------------|------------|
-| [eks-irsa-theft](./role/multi-hop/eks-irsa-theft/) | Steal IRSA credentials from compromised EKS pod | Hard |
-
-### Multi Hop Combo
-
-| Scenario | Description | Difficulty |
-|----------|-------------|------------|
-| [github-actions-oidc](./role/multi-hop-combo/github-actions-oidc/) | Exploit misconfigured GitHub Actions OIDC trust policy | Expert |
+| Scenario | Description | Difficulty | Reference |
+|----------|-------------|------------|-----------|
+| [lambda-backdoor](./04-multi-hop-combo/lambda-backdoor/) | PassRole + Lambda to execute privileged code | Hard | CloudGoat |
+| [ec2-role-hijack](./04-multi-hop-combo/ec2-role-hijack/) | Launch EC2 with admin role via PassRole | Hard | Rhino Security |

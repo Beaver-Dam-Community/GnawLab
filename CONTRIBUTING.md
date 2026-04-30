@@ -52,6 +52,23 @@ terraform destroy
 - Include real-world reference with source
 - `Learning Objectives` section: only for `01-beginner` category
 
+## Walkthrough Writing Guidelines
+
+Walkthroughs must follow the **real attacker workflow**. Include every command an attacker would actually execute, not just the exploit commands.
+
+### Required Steps (Access Key Based Scenarios)
+
+1. **Identity Confirmation** - Verify who you are with the compromised credentials
+2. **Permission Enumeration** - Enumerate ALL permissions (user inline, user attached, group membership, group inline, group attached policies)
+3. **Exploit** - Execute the attack based on discovered permissions
+4. **Capture the Flag** - Verify goal achieved and retrieve the flag
+
+### Why This Matters
+
+- Learners should understand the **complete attack chain**, not just the final exploit
+- Real attackers always enumerate permissions before acting
+- Skipping enumeration steps creates unrealistic expectations
+
 ## Pull Request Process
 
 1. Fork the repository
