@@ -38,30 +38,35 @@ sleep 60
 
 echo "GitLab is ready. Running initial configuration..."
 
+# Create root PAT using Rails runner.
+# Use symbol array for scopes and skip password change to avoid validation errors.
 ROOT_TOKEN=$(gitlab-rails runner "
-  root = User.find_by(username: 'root')
-  root.password = 'RootAdmin123!'
-  root.password_confirmation = 'RootAdmin123!'
-  root.save!
-  token = PersonalAccessToken.create!(
-    user: root,
+  token = User.find_by(username: 'root').personal_access_tokens.create!(
     name: 'setup-token',
-    scopes: ['api', 'sudo'],
-    expires_at: 1.day.from_now
+    scopes: [:api, :sudo],
+    expires_at: 30.days.from_now
   )
   puts token.token
-" 2>/dev/null | tail -1)
+" 2>&1 | grep '^glpat-' | tail -1)
 
-if [ -z "$ROOT_TOKEN" ] || [ "$ROOT_TOKEN" = "nil" ]; then
+if [ -z "$ROOT_TOKEN" ]; then
   echo "ERROR: Failed to obtain root API token."
   exit 1
 fi
+echo "Root token obtained."
+
+# Allow webhooks to internal/private network addresses (required for Atlantis)
+curl -sf -X PUT "http://localhost/api/v4/application/settings" \
+  -H "PRIVATE-TOKEN: $ROOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"allow_local_requests_from_web_hooks_and_services":true}' > /dev/null
 
 OPS_USER_ID=$(curl -sf -X POST "http://localhost/api/v4/users" \
   -H "PRIVATE-TOKEN: $ROOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"username":"000_ops","name":"000_ops","email":"ops@beavercorp.internal","password":"BeaverPassword123!","skip_confirmation":true}' \
   | jq -r '.id')
+echo "Created 000_ops user (id: $OPS_USER_ID)."
 
 PROJECT_ID=$(curl -sf -X POST "http://localhost/api/v4/projects" \
   -H "PRIVATE-TOKEN: $ROOT_TOKEN" \
@@ -69,6 +74,7 @@ PROJECT_ID=$(curl -sf -X POST "http://localhost/api/v4/projects" \
   -H "Content-Type: application/json" \
   -d '{"name":"infra-repo","visibility":"private","initialize_with_readme":false}' \
   | jq -r '.id')
+echo "Created infra-repo (id: $PROJECT_ID)."
 
 push_file() {
   local filename=$1
@@ -80,11 +86,12 @@ push_file() {
     -H "PRIVATE-TOKEN: $ROOT_TOKEN" \
     -H "SUDO: $OPS_USER_ID" \
     -H "Content-Type: application/json" \
-    -d "{\"branch\":\"main\",\"encoding\":\"base64\",\"content\":\"$content\",\"commit_message\":\"$message\"}"
+    -d "{\"branch\":\"main\",\"encoding\":\"base64\",\"content\":\"$content\",\"commit_message\":\"$message\"}" > /dev/null
+  echo "Pushed $filename."
 }
 
-push_file "main.tf"      /tmp/repo-main.tf      "Initial infrastructure setup"
-push_file "variables.tf" /tmp/repo-variables.tf "Add variables"
+push_file "main.tf"       /tmp/repo-main.tf       "Initial infrastructure setup"
+push_file "variables.tf"  /tmp/repo-variables.tf  "Add variables"
 push_file "atlantis.yaml" /tmp/repo-atlantis.yaml "Add Atlantis configuration"
 
 ATLANTIS_TOKEN=$(curl -sf -X POST "http://localhost/api/v4/users/$OPS_USER_ID/personal_access_tokens" \
@@ -92,6 +99,7 @@ ATLANTIS_TOKEN=$(curl -sf -X POST "http://localhost/api/v4/users/$OPS_USER_ID/pe
   -H "Content-Type: application/json" \
   -d '{"name":"atlantis-service-token","scopes":["api","read_repository","write_repository"]}' \
   | jq -r '.token')
+echo "Created Atlantis service token."
 
 aws ssm put-parameter \
   --region "$REGION" \
@@ -99,10 +107,12 @@ aws ssm put-parameter \
   --value "$ATLANTIS_TOKEN" \
   --type "SecureString" \
   --overwrite
+echo "Stored Atlantis token in SSM."
 
 curl -sf -X POST "http://localhost/api/v4/projects/$PROJECT_ID/hooks" \
   -H "PRIVATE-TOKEN: $ROOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"url\":\"http://$ATLANTIS_PRIVATE_IP:4141/events\",\"token\":\"$WEBHOOK_SECRET\",\"merge_requests_events\":true,\"push_events\":true,\"note_events\":true}"
+  -d "{\"url\":\"http://$ATLANTIS_PRIVATE_IP:4141/events\",\"token\":\"$WEBHOOK_SECRET\",\"merge_requests_events\":true,\"push_events\":true,\"note_events\":true}" > /dev/null
+echo "Registered Atlantis webhook."
 
 echo "GitLab setup complete. URL: http://$PUBLIC_IP | User: 000_ops | Pass: BeaverPassword123!"

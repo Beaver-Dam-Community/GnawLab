@@ -30,6 +30,14 @@ resource "aws_security_group" "gitlab_sg" {
     cidr_blocks = var.cg_whitelist
   }
 
+  # Allow Atlantis runner to call GitLab API internally
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]
+  }
+
   ingress {
     from_port   = 22
     to_port     = 22
@@ -51,7 +59,7 @@ resource "aws_security_group" "gitlab_sg" {
 
 resource "aws_security_group" "bastion_sg" {
   name        = "${var.scenario_name}-bastion-sg-${var.beaver_id}"
-  description = "Allow SSH from whitelist"
+  description = "Allow SSH from whitelist, Atlantis webhook from GitLab"
   vpc_id      = aws_vpc.scenario_vpc.id
 
   ingress {
@@ -59,6 +67,14 @@ resource "aws_security_group" "bastion_sg" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = var.cg_whitelist
+  }
+
+  # Allow GitLab to deliver webhooks to Atlantis
+  ingress {
+    from_port       = 4141
+    to_port         = 4141
+    protocol        = "tcp"
+    security_groups = [aws_security_group.gitlab_sg.id]
   }
 
   egress {
@@ -104,6 +120,11 @@ resource "aws_instance" "gitlab_server" {
   private_ip             = local.gitlab_private_ip
   iam_instance_profile   = aws_iam_instance_profile.gitlab_profile.name
   vpc_security_group_ids = [aws_security_group.gitlab_sg.id]
+
+  root_block_device {
+    volume_size = 30
+    volume_type = "gp3"
+  }
 
   user_data = base64encode(templatefile("${path.module}/scripts/setup-gitlab.sh.tpl", {
     region              = var.region
