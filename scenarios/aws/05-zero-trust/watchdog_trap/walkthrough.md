@@ -1,31 +1,4 @@
-# Watchdog Trap - Walkthrough
-
-> **Spoiler Warning**: This document contains the complete solution.
-
-## Attack Path
-
-```mermaid
-flowchart TB
-    A[BeaverDam Incident Report Generator] --> B[SSTI Discovery\n7×7 = 49]
-    B --> C[RCE via Jinja2]
-    C --> D[Webapp Reverse Shell\nSSH Pinggy TCP Tunnel]
-    D --> E[Internal Network Recon\nip addr + port scan]
-    E --> F[Service Identification]
-    F --> G[Chisel Reverse Tunnel\nR:9090 + R:9194]
-    G --> H[Prowler Dashboard\nBrowser → localhost:9090]
-    G --> I[Steampipe SQL Console\nBrowser → localhost:9194]
-    H --> J[CloudWatch KMS FAIL\n/corp/deploy-pipeline]
-    J --> I
-    I --> K[Git Credentials Extracted\nCloning https://dev-user:PASSWORD@codecommit]
-    K --> L[CodeCommit Clone\nbeaverdam-config]
-    L --> M[task-definition.json Injection\nbash reverse shell command]
-    M --> N[git push main\nCodePipeline auto-triggers]
-    N --> O[ECS Blue/Green Deployment\n~5-10 min]
-    O --> P[Reverse Shell → echo $FLAG]
-    P --> Q[FLAG]
-```
-
----
+# Walkthrough
 
 ## Step 1: Reconnaissance
 
