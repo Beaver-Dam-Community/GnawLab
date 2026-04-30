@@ -126,8 +126,8 @@ resource "aws_instance" "webapp" {
   )
 
   tags = {
-    Name     = "${var.project_name}-webapp"
-    Scenario = "${var.project_name}-watchdog-trap"
+    Name     = "${local.scenario_name}-webapp-${local.scenario_id}"
+    Scenario = "${local.scenario_name}-watchdog-trap"
   }
 }
 
@@ -136,7 +136,7 @@ resource "aws_eip" "webapp" {
   instance = aws_instance.webapp.id
   domain   = "vpc"
 
-  tags = { Name = "${var.project_name}-webapp-eip" }
+  tags = { Name = "${local.scenario_name}-webapp-eip-${local.scenario_id}" }
 }
 
 # ── Prowler Dashboard ──────────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ resource "aws_instance" "prowler" {
       <div class="summary">SUMMARY: PASS 142 / FAIL 7 / WARNING 3</div>
       <div class="finding">
         <div class="fail">[MEDIUM] cloudwatch_log_group_kms_encryption_enabled</div>
-        <p>Resource: <code>arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/corp/deploy-pipeline</code></p>
+        <p>Resource: <code>arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${local.log_group_name}</code></p>
         <p>CloudWatch Log Group does not use a customer managed KMS key.</p>
       </div>
     </body>
@@ -221,8 +221,8 @@ resource "aws_instance" "prowler" {
   )
 
   tags = {
-    Name     = "${var.project_name}-prowler-dashboard"
-    Scenario = "${var.project_name}-watchdog-trap"
+    Name     = "${local.scenario_name}-prowler-dashboard-${local.scenario_id}"
+    Scenario = "${local.scenario_name}-watchdog-trap"
   }
 }
 
@@ -401,7 +401,7 @@ resource "aws_instance" "steampipe" {
   )
 
   tags = {
-    Name     = "${var.project_name}-steampipe-dashboard"
-    Scenario = "${var.project_name}-watchdog-trap"
+    Name     = "${local.scenario_name}-steampipe-dashboard-${local.scenario_id}"
+    Scenario = "${local.scenario_name}-watchdog-trap"
   }
 }

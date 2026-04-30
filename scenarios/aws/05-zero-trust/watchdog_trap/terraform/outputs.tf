@@ -1,3 +1,5 @@
+output "scenario_id" { value = local.scenario_id }
+
 # ── Information provided to participants ──────────────────────────────────────────────────────────────
 output "webapp_url" {
   description = "BeaverDam Incident Report Generator URL for participants"
@@ -22,6 +24,7 @@ output "dev_user_codecommit_password" {
 }
 output "ecs_task_execution_role_arn" { value = aws_iam_role.ecs_task_execution.arn }
 output "flag_secret_arn" { value = aws_secretsmanager_secret.flag.arn }
+output "log_group_name" { value = local.log_group_name }
 
 # ── Operator reference only (not exposed to participants) ──────────────────────────────────
 output "prowler_private_ip" {

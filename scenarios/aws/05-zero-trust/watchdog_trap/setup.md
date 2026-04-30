@@ -78,10 +78,10 @@ Resources that will be created:
 - 1 CodePipeline (Source → Build → Deploy)
 - 1 CodeBuild project
 - 1 CodeDeploy application + deployment group
-- 1 CodeCommit repository (`beaverdam-config`)
+- 1 CodeCommit repository (`gnawlab-watchdog-config-<id>`)
 - 1 ECR repository
 - 1 S3 bucket (pipeline artifacts)
-- 1 CloudWatch Log Group (`/corp/deploy-pipeline`)
+- 1 CloudWatch Log Group (`/corp/deploy-pipeline-<id>`)
 - 1 Secrets Manager secret (FLAG)
 
 ### Step 5: Deploy the Scenario
@@ -106,6 +106,7 @@ GIT_USER=$(terraform output -raw dev_user_codecommit_username)
 GIT_PASS=$(terraform output -raw dev_user_codecommit_password)
 EXEC_ROLE_ARN=$(terraform output -raw ecs_task_execution_role_arn)
 FLAG_SECRET_ARN=$(terraform output -raw flag_secret_arn)
+LOG_GROUP_NAME=$(terraform output -raw log_group_name)
 AWS_REGION="us-east-1"
 PROJECT_NAME="beaverdam"
 ```
@@ -137,6 +138,7 @@ sed \
   -e "s|EXEC_ROLE_ARN|${EXEC_ROLE_ARN}|g" \
   -e "s|FLAG_SECRET_ARN|${FLAG_SECRET_ARN}|g" \
   -e "s|AWS_REGION|${AWS_REGION}|g" \
+  -e "s|LOG_GROUP_NAME|${LOG_GROUP_NAME}|g" \
   "$SEED_DIR/task-definition.json.tmpl" > task-definition.json
 ```
 

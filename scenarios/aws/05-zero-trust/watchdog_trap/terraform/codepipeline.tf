@@ -3,7 +3,7 @@
 # CodeCommit push -> automatic pipeline trigger (core attack chain)
 
 resource "aws_codepipeline" "main" {
-  name     = "${var.project_name}-pipeline"
+  name     = "${local.scenario_name}-pipeline-${local.scenario_id}"
   role_arn = aws_iam_role.codepipeline.arn
 
   artifact_store {
@@ -24,7 +24,7 @@ resource "aws_codepipeline" "main" {
       output_artifacts = ["SourceArtifact"]
 
       configuration = {
-        RepositoryName       = "${var.project_name}-config"
+        RepositoryName       = local.codecommit_repo_name
         BranchName           = "main"
         PollForSourceChanges = "true" # git push triggers the pipeline automatically
         OutputArtifactFormat = "CODE_ZIP"

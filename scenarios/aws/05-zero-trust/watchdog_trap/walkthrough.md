@@ -264,16 +264,20 @@ Navigate to `http://<WSL_IP>:9194` in your browser.
 
 **Query 1 — List log groups:**
 ```sql
-select log_group_name from aws_cloudwatch_log_group limit 20;
+select log_group_name from aws_cloudwatch_log_group;
 ```
+
+Look for a log group starting with `/corp/deploy-pipeline-`.
 
 **Query 2 — Find git credentials in build logs:**
 ```sql
 select message from aws_cloudwatch_log_event
-where log_group_name = '/corp/deploy-pipeline'
+where log_group_name = '/corp/deploy-pipeline-<SCENARIO_ID>'
 order by timestamp asc
 limit 50;
 ```
+
+Replace `<SCENARIO_ID>` with the actual suffix found in Query 1.
 
 > **Note:** Use `ORDER BY timestamp ASC` — the `Cloning https://` line appears early in the build log (pre_build phase). Using DESC may miss it if you don't query enough rows.
 

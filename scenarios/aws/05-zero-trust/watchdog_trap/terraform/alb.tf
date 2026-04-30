@@ -1,19 +1,19 @@
 # ── Application Load Balancer ─────────────────────────────────────────────────
 
 resource "aws_lb" "main" {
-  name               = "${var.project_name}-alb"
+  name               = "${local.scenario_name}-alb-${local.scenario_id}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
 
-  tags = { Name = "${var.project_name}-alb" }
+  tags = { Name = "${local.scenario_name}-alb-${local.scenario_id}" }
 }
 
 # ── Target Groups (Blue / Green) ──────────────────────────────────────────────
 
 resource "aws_lb_target_group" "blue" {
-  name        = "${var.project_name}-blue"
+  name        = "${local.scenario_name}-blue-${local.scenario_id}"
   port        = 3000
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
@@ -28,11 +28,11 @@ resource "aws_lb_target_group" "blue" {
     timeout             = 5
   }
 
-  tags = { Name = "${var.project_name}-blue-tg" }
+  tags = { Name = "${local.scenario_name}-blue-tg-${local.scenario_id}" }
 }
 
 resource "aws_lb_target_group" "green" {
-  name        = "${var.project_name}-green"
+  name        = "${local.scenario_name}-green-${local.scenario_id}"
   port        = 3000
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
@@ -47,7 +47,7 @@ resource "aws_lb_target_group" "green" {
     timeout             = 5
   }
 
-  tags = { Name = "${var.project_name}-green-tg" }
+  tags = { Name = "${local.scenario_name}-green-tg-${local.scenario_id}" }
 }
 
 # ── Listeners ─────────────────────────────────────────────────────────────────

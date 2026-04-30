@@ -1,20 +1,13 @@
-locals {
-  codecommit_repo_arn = "arn:aws:codecommit:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${var.project_name}-config"
-  log_group_arn       = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/corp/deploy-pipeline"
-  ecr_repo_arn        = "arn:aws:ecr:${var.aws_region}:${data.aws_caller_identity.current.account_id}:repository/${var.project_name}-app"
-  s3_artifact_arn     = aws_s3_bucket.artifacts.arn
-}
-
 # ── dev-user ────────────────────────────────────────────────────────────────────
 # [Intentional Vulnerability] IAM Git credentials are hardcoded in the buildspec and exposed in plaintext in CloudWatch logs
 
 resource "aws_iam_user" "dev_user" {
-  name = "dev-user"
-  tags = { Scenario = "${var.project_name}-deploy-hijack" }
+  name = "${local.scenario_name}-dev-user-${local.scenario_id}"
+  tags = { Scenario = "${local.scenario_name}-deploy-hijack" }
 }
 
 resource "aws_iam_user_policy" "dev_user_codecommit" {
-  name = "dev-user-codecommit-policy"
+  name = "${local.scenario_name}-dev-user-policy-${local.scenario_id}"
   user = aws_iam_user.dev_user.name
 
   policy = jsonencode({
@@ -27,7 +20,7 @@ resource "aws_iam_user_policy" "dev_user_codecommit" {
           "codecommit:GitPull",
           "codecommit:GitPush"
         ]
-        # Scoped to beaverdam-config repo only — no access to other repositories
+        # Scoped to config repo only — no access to other repositories
         Resource = local.codecommit_repo_arn
       }
     ]
@@ -47,7 +40,7 @@ resource "aws_iam_service_specific_credential" "dev_user_git" {
 #                  → cannot directly read log contents → directs participants to Steampipe
 
 resource "aws_iam_role" "prowler_ec2" {
-  name = "${var.project_name}-prowler-ec2-role"
+  name = "${local.scenario_name}-prowler-ec2-role-${local.scenario_id}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -58,11 +51,11 @@ resource "aws_iam_role" "prowler_ec2" {
     }]
   })
 
-  tags = { Name = "${var.project_name}-prowler-ec2-role" }
+  tags = { Name = "${local.scenario_name}-prowler-ec2-role-${local.scenario_id}" }
 }
 
 resource "aws_iam_role_policy" "prowler_ec2_policy" {
-  name = "${var.project_name}-prowler-policy"
+  name = "${local.scenario_name}-prowler-policy-${local.scenario_id}"
   role = aws_iam_role.prowler_ec2.id
 
   policy = jsonencode({
@@ -94,16 +87,16 @@ resource "aws_iam_role_policy" "prowler_ec2_policy" {
 }
 
 resource "aws_iam_instance_profile" "prowler_ec2" {
-  name = "${var.project_name}-prowler-instance-profile"
+  name = "${local.scenario_name}-prowler-instance-profile-${local.scenario_id}"
   role = aws_iam_role.prowler_ec2.name
 }
 
 # ── steampipe-ec2-role ──────────────────────────────────────────────────────────
-# Intent: can read log content → discovers Git credentials from /corp/deploy-pipeline
+# Intent: can read log content → discovers Git credentials from the deploy-pipeline log group
 # Unlike Prowler, GetLogEvents and FilterLogEvents are permitted
 
 resource "aws_iam_role" "steampipe_ec2" {
-  name = "${var.project_name}-steampipe-ec2-role"
+  name = "${local.scenario_name}-steampipe-ec2-role-${local.scenario_id}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -114,11 +107,11 @@ resource "aws_iam_role" "steampipe_ec2" {
     }]
   })
 
-  tags = { Name = "${var.project_name}-steampipe-ec2-role" }
+  tags = { Name = "${local.scenario_name}-steampipe-ec2-role-${local.scenario_id}" }
 }
 
 resource "aws_iam_role_policy" "steampipe_ec2_policy" {
-  name = "${var.project_name}-steampipe-policy"
+  name = "${local.scenario_name}-steampipe-policy-${local.scenario_id}"
   role = aws_iam_role.steampipe_ec2.id
 
   policy = jsonencode({
@@ -140,14 +133,14 @@ resource "aws_iam_role_policy" "steampipe_ec2_policy" {
 }
 
 resource "aws_iam_instance_profile" "steampipe_ec2" {
-  name = "${var.project_name}-steampipe-instance-profile"
+  name = "${local.scenario_name}-steampipe-instance-profile-${local.scenario_id}"
   role = aws_iam_role.steampipe_ec2.name
 }
 
 # ── codebuild-role ──────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "codebuild" {
-  name = "${var.project_name}-codebuild-role"
+  name = "${local.scenario_name}-codebuild-role-${local.scenario_id}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -158,11 +151,11 @@ resource "aws_iam_role" "codebuild" {
     }]
   })
 
-  tags = { Name = "${var.project_name}-codebuild-role" }
+  tags = { Name = "${local.scenario_name}-codebuild-role-${local.scenario_id}" }
 }
 
 resource "aws_iam_role_policy" "codebuild_policy" {
-  name = "${var.project_name}-codebuild-policy"
+  name = "${local.scenario_name}-codebuild-policy-${local.scenario_id}"
   role = aws_iam_role.codebuild.id
 
   policy = jsonencode({
@@ -230,7 +223,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
 # ── codedeploy-role ─────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "codedeploy" {
-  name = "${var.project_name}-codedeploy-role"
+  name = "${local.scenario_name}-codedeploy-role-${local.scenario_id}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -241,7 +234,7 @@ resource "aws_iam_role" "codedeploy" {
     }]
   })
 
-  tags = { Name = "${var.project_name}-codedeploy-role" }
+  tags = { Name = "${local.scenario_name}-codedeploy-role-${local.scenario_id}" }
 }
 
 resource "aws_iam_role_policy_attachment" "codedeploy_ecs" {
@@ -252,7 +245,7 @@ resource "aws_iam_role_policy_attachment" "codedeploy_ecs" {
 # ── codepipeline-role ────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "codepipeline" {
-  name = "${var.project_name}-codepipeline-role"
+  name = "${local.scenario_name}-codepipeline-role-${local.scenario_id}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -263,11 +256,11 @@ resource "aws_iam_role" "codepipeline" {
     }]
   })
 
-  tags = { Name = "${var.project_name}-codepipeline-role" }
+  tags = { Name = "${local.scenario_name}-codepipeline-role-${local.scenario_id}" }
 }
 
 resource "aws_iam_role_policy" "codepipeline_policy" {
-  name = "${var.project_name}-codepipeline-policy"
+  name = "${local.scenario_name}-codepipeline-policy-${local.scenario_id}"
   role = aws_iam_role.codepipeline.id
 
   policy = jsonencode({
@@ -302,7 +295,7 @@ resource "aws_iam_role_policy" "codepipeline_policy" {
           "codebuild:BatchGetBuilds",
           "codebuild:StartBuild"
         ]
-        Resource = "arn:aws:codebuild:${var.aws_region}:${data.aws_caller_identity.current.account_id}:project/${var.project_name}-build"
+        Resource = "arn:aws:codebuild:${var.aws_region}:${data.aws_caller_identity.current.account_id}:project/${local.scenario_name}-build-${local.scenario_id}"
       },
       {
         Sid    = "CodeDeployTrigger"
@@ -365,7 +358,7 @@ resource "aws_iam_role_policy" "codepipeline_policy" {
 # ── ecs-task-execution-role ──────────────────────────────────────────────────────
 
 resource "aws_iam_role" "ecs_task_execution" {
-  name = "${var.project_name}-ecs-task-execution-role"
+  name = "${local.scenario_name}-ecs-task-execution-role-${local.scenario_id}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -376,7 +369,7 @@ resource "aws_iam_role" "ecs_task_execution" {
     }]
   })
 
-  tags = { Name = "${var.project_name}-ecs-task-execution-role" }
+  tags = { Name = "${local.scenario_name}-ecs-task-execution-role-${local.scenario_id}" }
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_managed" {
@@ -387,7 +380,7 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_managed" {
 # FLAG is stored in Secrets Manager → ECS Agent injects it into the container
 # dev-user does not have this permission → after cloning, only the ARN is visible; the value cannot be read
 resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
-  name = "${var.project_name}-ecs-execution-secrets-policy"
+  name = "${local.scenario_name}-ecs-execution-secrets-policy-${local.scenario_id}"
   role = aws_iam_role.ecs_task_execution.id
 
   policy = jsonencode({

@@ -3,11 +3,11 @@
 # Only ecsTaskExecutionRole is allowed GetSecretValue → ECS Agent injects it into the container
 
 resource "aws_secretsmanager_secret" "flag" {
-  name                    = "${var.project_name}/flag"
+  name                    = "${local.scenario_name}/flag-${local.scenario_id}"
   description             = "CTF flag injected into the ECS task as environment variable"
   recovery_window_in_days = 0 # allow immediate deletion (for CTF environment teardown)
 
-  tags = { Name = "${var.project_name}-flag" }
+  tags = { Name = "${local.scenario_name}-flag-${local.scenario_id}" }
 }
 
 resource "aws_secretsmanager_secret_version" "flag" {

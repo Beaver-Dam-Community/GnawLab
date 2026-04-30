@@ -1,7 +1,7 @@
 # ── CodeDeploy Application ────────────────────────────────────────────────────
 
 resource "aws_codedeploy_app" "main" {
-  name             = "${var.project_name}-app"
+  name             = "${local.scenario_name}-app-${local.scenario_id}"
   compute_platform = "ECS"
 }
 
@@ -9,7 +9,7 @@ resource "aws_codedeploy_app" "main" {
 
 resource "aws_codedeploy_deployment_group" "main" {
   app_name               = aws_codedeploy_app.main.name
-  deployment_group_name  = "${var.project_name}-dg"
+  deployment_group_name  = "${local.scenario_name}-dg-${local.scenario_id}"
   service_role_arn       = aws_iam_role.codedeploy.arn
   deployment_config_name = "CodeDeployDefault.ECSAllAtOnce"
 

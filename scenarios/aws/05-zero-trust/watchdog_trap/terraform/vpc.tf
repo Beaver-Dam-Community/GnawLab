@@ -4,14 +4,14 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
   enable_dns_hostnames = true
 
-  tags = { Name = "${var.project_name}-vpc" }
+  tags = { Name = "${local.scenario_name}-vpc-${local.scenario_id}" }
 }
 
 # ── Internet Gateway ────────────────────────────────────────────────────────────
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
-  tags = { Name = "${var.project_name}-igw" }
+  tags = { Name = "${local.scenario_name}-igw-${local.scenario_id}" }
 }
 
 # ── NAT Gateway ─────────────────────────────────────────────────────────────────
@@ -20,14 +20,14 @@ resource "aws_internet_gateway" "main" {
 
 resource "aws_eip" "nat" {
   domain = "vpc"
-  tags   = { Name = "${var.project_name}-nat-eip" }
+  tags   = { Name = "${local.scenario_name}-nat-eip-${local.scenario_id}" }
 }
 
 resource "aws_nat_gateway" "main" {
   allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public_a.id # NAT must be in a public subnet (with an IGW route)
 
-  tags = { Name = "${var.project_name}-nat-gw" }
+  tags = { Name = "${local.scenario_name}-nat-gw-${local.scenario_id}" }
 
   depends_on = [aws_internet_gateway.main]
 }
@@ -43,7 +43,7 @@ resource "aws_subnet" "security" {
   availability_zone       = "${var.aws_region}a"
   map_public_ip_on_launch = true
 
-  tags = { Name = "${var.project_name}-security-subnet" }
+  tags = { Name = "${local.scenario_name}-security-subnet-${local.scenario_id}" }
 }
 
 # tools_subnet — hosts prowler + steampipe (NAT route)
@@ -55,7 +55,7 @@ resource "aws_subnet" "tools" {
   availability_zone       = "${var.aws_region}a"
   map_public_ip_on_launch = false
 
-  tags = { Name = "${var.project_name}-tools-subnet" }
+  tags = { Name = "${local.scenario_name}-tools-subnet-${local.scenario_id}" }
 }
 
 # public_subnet_a / _b — hosts ALB (multi-AZ required) + NAT GW placement
@@ -65,7 +65,7 @@ resource "aws_subnet" "public_a" {
   availability_zone       = "${var.aws_region}a"
   map_public_ip_on_launch = false
 
-  tags = { Name = "${var.project_name}-public-a" }
+  tags = { Name = "${local.scenario_name}-public-a-${local.scenario_id}" }
 }
 
 resource "aws_subnet" "public_b" {
@@ -74,7 +74,7 @@ resource "aws_subnet" "public_b" {
   availability_zone       = "${var.aws_region}b"
   map_public_ip_on_launch = false
 
-  tags = { Name = "${var.project_name}-public-b" }
+  tags = { Name = "${local.scenario_name}-public-b-${local.scenario_id}" }
 }
 
 # private_subnet_a / _b — hosts ECS Fargate (NAT route)
@@ -83,7 +83,7 @@ resource "aws_subnet" "private_a" {
   cidr_block        = "10.0.4.0/24"
   availability_zone = "${var.aws_region}a"
 
-  tags = { Name = "${var.project_name}-private-a" }
+  tags = { Name = "${local.scenario_name}-private-a-${local.scenario_id}" }
 }
 
 resource "aws_subnet" "private_b" {
@@ -91,7 +91,7 @@ resource "aws_subnet" "private_b" {
   cidr_block        = "10.0.5.0/24"
   availability_zone = "${var.aws_region}b"
 
-  tags = { Name = "${var.project_name}-private-b" }
+  tags = { Name = "${local.scenario_name}-private-b-${local.scenario_id}" }
 }
 
 # ── Route Tables ────────────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.main.id
   }
 
-  tags = { Name = "${var.project_name}-rt-public" }
+  tags = { Name = "${local.scenario_name}-rt-public-${local.scenario_id}" }
 }
 
 resource "aws_route_table_association" "security" {
@@ -133,7 +133,7 @@ resource "aws_route_table" "nat" {
     nat_gateway_id = aws_nat_gateway.main.id
   }
 
-  tags = { Name = "${var.project_name}-rt-nat" }
+  tags = { Name = "${local.scenario_name}-rt-nat-${local.scenario_id}" }
 }
 
 resource "aws_route_table_association" "tools" {
@@ -155,7 +155,7 @@ resource "aws_route_table_association" "private_b" {
 
 # webapp-sg — BeaverDam Incident Report Generator (sole external entry point)
 resource "aws_security_group" "webapp" {
-  name        = "${var.project_name}-webapp-sg"
+  name        = "${local.scenario_name}-webapp-sg-${local.scenario_id}"
   description = "External access for BeaverDam Incident Report Generator SSTI RCE entrypoint"
   vpc_id      = aws_vpc.main.id
 
@@ -174,13 +174,13 @@ resource "aws_security_group" "webapp" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "${var.project_name}-webapp-sg" }
+  tags = { Name = "${local.scenario_name}-webapp-sg-${local.scenario_id}" }
 }
 
 # dashboard-sg — Prowler + Steampipe (inbound from webapp-sg only)
 # Placed in tools_subnet with no public IP + double-blocked by SG
 resource "aws_security_group" "dashboard" {
-  name        = "${var.project_name}-dashboard-sg"
+  name        = "${local.scenario_name}-dashboard-sg-${local.scenario_id}"
   description = "Internal Prowler and Steampipe access from webapp-sg only"
   vpc_id      = aws_vpc.main.id
 
@@ -207,12 +207,12 @@ resource "aws_security_group" "dashboard" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "${var.project_name}-dashboard-sg" }
+  tags = { Name = "${local.scenario_name}-dashboard-sg-${local.scenario_id}" }
 }
 
 # alb-sg — ALB (port 80 prod + 8080 CodeDeploy test)
 resource "aws_security_group" "alb" {
-  name        = "${var.project_name}-alb-sg"
+  name        = "${local.scenario_name}-alb-sg-${local.scenario_id}"
   description = "ALB: port 80 (prod) + 8080 (CodeDeploy test)"
   vpc_id      = aws_vpc.main.id
 
@@ -239,12 +239,12 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "${var.project_name}-alb-sg" }
+  tags = { Name = "${local.scenario_name}-alb-sg-${local.scenario_id}" }
 }
 
 # ecs-sg — ECS Fargate (port 3000 inbound from ALB only)
 resource "aws_security_group" "ecs" {
-  name        = "${var.project_name}-ecs-sg"
+  name        = "${local.scenario_name}-ecs-sg-${local.scenario_id}"
   description = "ECS Fargate: port 3000 from ALB only"
   vpc_id      = aws_vpc.main.id
 
@@ -263,5 +263,5 @@ resource "aws_security_group" "ecs" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "${var.project_name}-ecs-sg" }
+  tags = { Name = "${local.scenario_name}-ecs-sg-${local.scenario_id}" }
 }

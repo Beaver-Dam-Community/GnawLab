@@ -1,10 +1,10 @@
 # ── CodeBuild Project ─────────────────────────────────────────────────────────
 # [Intentional Vulnerability] dev-user Git credentials are hardcoded inline in the buildspec
-# → The git clone command is recorded in /corp/deploy-pipeline logs during CodeBuild execution
+# → The git clone command is recorded in the deploy-pipeline logs during CodeBuild execution
 # → Querying the logs via Steampipe exposes the credentials in plaintext
 
 resource "aws_codebuild_project" "main" {
-  name         = "${var.project_name}-build"
+  name         = "${local.scenario_name}-build-${local.scenario_id}"
   description  = "Build the BeaverDam application Docker image and push it to ECR"
   service_role = aws_iam_role.codebuild.arn
 
@@ -65,10 +65,10 @@ resource "aws_codebuild_project" "main" {
 
   logs_config {
     cloudwatch_logs {
-      group_name  = "/corp/deploy-pipeline"
+      group_name  = local.log_group_name
       stream_name = "codebuild"
     }
   }
 
-  tags = { Name = "${var.project_name}-build" }
+  tags = { Name = "${local.scenario_name}-build-${local.scenario_id}" }
 }

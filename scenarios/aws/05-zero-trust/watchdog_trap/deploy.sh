@@ -69,6 +69,7 @@ seed_codecommit() {
   GIT_PASS=$(terraform output -raw dev_user_codecommit_password)
   EXEC_ROLE_ARN=$(terraform output -raw ecs_task_execution_role_arn)
   FLAG_SECRET_ARN=$(terraform output -raw flag_secret_arn)
+  LOG_GROUP_NAME=$(terraform output -raw log_group_name)
 
   ENC_USER=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$GIT_USER")
   ENC_PASS=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$GIT_PASS")
@@ -93,6 +94,7 @@ seed_codecommit() {
     -e "s|EXEC_ROLE_ARN|${EXEC_ROLE_ARN}|g" \
     -e "s|FLAG_SECRET_ARN|${FLAG_SECRET_ARN}|g" \
     -e "s|AWS_REGION|${AWS_REGION}|g" \
+    -e "s|LOG_GROUP_NAME|${LOG_GROUP_NAME}|g" \
     "$SEED_DIR/task-definition.json.tmpl" > task-definition.json
 
   git config user.email "ops@beaverdam.internal"

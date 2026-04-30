@@ -1,8 +1,8 @@
 resource "aws_codecommit_repository" "config" {
-  repository_name = "${var.project_name}-config"
+  repository_name = local.codecommit_repo_name
   description     = "Repository for BeaverDam ECS deployment configuration files"
 
-  tags = { Name = "${var.project_name}-config" }
+  tags = { Name = local.codecommit_repo_name }
 }
 
 # ── Initial file seeding is performed outside of Terraform ─────────────────────────────────────
