@@ -3,7 +3,7 @@
 #   2. Resource policy that limits the source IP to local.cg_whitelist_list
 
 resource "aws_api_gateway_rest_api" "main" {
-  name = "${local.name_prefix}-api"
+  name = "${local.scenario_name}-api-${local.scenario_id}"
 
   endpoint_configuration {
     types = ["REGIONAL"]
@@ -35,7 +35,7 @@ resource "aws_api_gateway_rest_api" "main" {
 }
 
 resource "aws_api_gateway_authorizer" "cognito" {
-  name            = "${local.name_prefix}-cognito"
+  name            = "${local.scenario_name}-cognito-${local.scenario_id}"
   type            = "COGNITO_USER_POOLS"
   rest_api_id     = aws_api_gateway_rest_api.main.id
   provider_arns   = [aws_cognito_user_pool.main.arn]

@@ -18,12 +18,12 @@ locals {
   scenario_id   = random_string.scenario_id.result
   scenario_name = "gnawlab-bkp"
 
-  # Resource naming. Most resources reuse `name_prefix`. OpenSearch Serverless
-  # collection / access policy / security policy names are capped at 32 chars,
-  # so a shorter `oss_*` variant is used there.
-  name_prefix    = "${local.scenario_name}-${local.scenario_id}"
-  oss_prefix     = "bkp-${local.scenario_id}"
-  oss_collection = "bkp-kb-${local.scenario_id}"
+  # Resource naming convention (matches s3-data-heist / secrets-extraction):
+  #   "${scenario_name}-<resource>-${scenario_id}"
+  # Length budget: scenario_name = 11 chars, scenario_id = 8 chars, dashes = 2,
+  # which leaves up to 32 - 11 - 8 - 2 = 11 chars for <resource> when the
+  # underlying service caps the total at 32 (OpenSearch Serverless).
+  oss_collection = "${local.scenario_name}-kb-${local.scenario_id}"
 
   # KB document IDs / S3 keys for the protected April 2026 customer export.
   customer_export_doc_id = "customer-export/fitmall/2026-04"

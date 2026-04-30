@@ -2,7 +2,7 @@
 # Domain-based auto-grouping: BPO emails -> bpo_editor; seller emails -> seller_admin.
 
 resource "aws_cognito_user_pool" "main" {
-  name = "${local.name_prefix}-pool"
+  name = "${local.scenario_name}-pool-${local.scenario_id}"
 
   # Allow self-signup. Email is the username + verification channel.
   username_attributes = ["email"]
@@ -46,7 +46,7 @@ resource "aws_cognito_user_pool" "main" {
 # Cognito User Pool Client used by the SaaS console SPA + customer widget.
 # No client secret (browser SPA).
 resource "aws_cognito_user_pool_client" "spa" {
-  name         = "${local.name_prefix}-spa"
+  name         = "${local.scenario_name}-spa-${local.scenario_id}"
   user_pool_id = aws_cognito_user_pool.main.id
 
   generate_secret = false

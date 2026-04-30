@@ -45,6 +45,6 @@ resource "aws_kms_key" "workspace" {
 }
 
 resource "aws_kms_alias" "workspace" {
-  name          = "alias/${local.name_prefix}-workspace"
+  name          = "alias/${local.scenario_name}-workspace-${local.scenario_id}"
   target_key_id = aws_kms_key.workspace.key_id
 }

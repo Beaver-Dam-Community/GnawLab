@@ -16,7 +16,7 @@ data "aws_iam_policy_document" "lambda_assume" {
 # chat_backend
 # ------------------------------------------------------------
 resource "aws_iam_role" "chat_backend" {
-  name               = "${local.name_prefix}-chat-backend"
+  name               = "${local.scenario_name}-chat-backend-${local.scenario_id}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -53,7 +53,7 @@ resource "aws_iam_role_policy" "chat_backend_inline" {
 # source_link_issuer
 # ------------------------------------------------------------
 resource "aws_iam_role" "source_link_issuer" {
-  name               = "${local.name_prefix}-source-link-issuer"
+  name               = "${local.scenario_name}-source-link-issuer-${local.scenario_id}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -91,7 +91,7 @@ resource "aws_iam_role_policy" "source_link_issuer_inline" {
 # kb_ingestion_trigger
 # ------------------------------------------------------------
 resource "aws_iam_role" "kb_ingestion_trigger" {
-  name               = "${local.name_prefix}-kb-ingestion"
+  name               = "${local.scenario_name}-kb-ingestion-${local.scenario_id}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -123,7 +123,7 @@ resource "aws_iam_role_policy" "kb_ingestion_inline" {
 # Cognito hooks
 # ------------------------------------------------------------
 resource "aws_iam_role" "cognito_pre_signup" {
-  name               = "${local.name_prefix}-cognito-pre-signup"
+  name               = "${local.scenario_name}-cognito-pre-signup-${local.scenario_id}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -133,7 +133,7 @@ resource "aws_iam_role_policy_attachment" "cognito_pre_signup_basic" {
 }
 
 resource "aws_iam_role" "cognito_post_confirmation" {
-  name               = "${local.name_prefix}-cognito-post-conf"
+  name               = "${local.scenario_name}-cognito-post-conf-${local.scenario_id}"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
 }
 
@@ -177,7 +177,7 @@ data "aws_iam_policy_document" "bedrock_agent_assume" {
 }
 
 resource "aws_iam_role" "bedrock_agent" {
-  name               = "${local.name_prefix}-bedrock-agent"
+  name               = "${local.scenario_name}-bedrock-agent-${local.scenario_id}"
   assume_role_policy = data.aws_iam_policy_document.bedrock_agent_assume.json
 }
 
@@ -231,7 +231,7 @@ data "aws_iam_policy_document" "bedrock_kb_assume" {
 }
 
 resource "aws_iam_role" "bedrock_kb" {
-  name               = "${local.name_prefix}-bedrock-kb"
+  name               = "${local.scenario_name}-bedrock-kb-${local.scenario_id}"
   assume_role_policy = data.aws_iam_policy_document.bedrock_kb_assume.json
 }
 

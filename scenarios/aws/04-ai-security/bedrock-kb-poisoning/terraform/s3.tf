@@ -8,7 +8,7 @@
 # ============================================================
 
 resource "aws_s3_bucket" "workspace" {
-  bucket        = "${local.name_prefix}-workspace"
+  bucket        = "${local.scenario_name}-workspace-${local.scenario_id}"
   force_destroy = true
 }
 
@@ -129,7 +129,7 @@ resource "aws_s3_object" "seed_customer_export" {
 # ============================================================
 
 resource "aws_s3_bucket" "console" {
-  bucket        = "${local.name_prefix}-console"
+  bucket        = "${local.scenario_name}-console-${local.scenario_id}"
   force_destroy = true
 }
 

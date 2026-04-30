@@ -39,7 +39,7 @@ data "archive_file" "source_link_issuer" {
 # Functions
 # ------------------------------------------------------------
 resource "aws_lambda_function" "cognito_pre_signup" {
-  function_name    = "${local.name_prefix}-cognito-pre-signup"
+  function_name    = "${local.scenario_name}-cognito-pre-signup-${local.scenario_id}"
   filename         = data.archive_file.cognito_pre_signup.output_path
   source_code_hash = data.archive_file.cognito_pre_signup.output_base64sha256
   handler          = "index.lambda_handler"
@@ -56,7 +56,7 @@ resource "aws_lambda_function" "cognito_pre_signup" {
 }
 
 resource "aws_lambda_function" "cognito_post_confirmation" {
-  function_name    = "${local.name_prefix}-cognito-post-conf"
+  function_name    = "${local.scenario_name}-cognito-post-conf-${local.scenario_id}"
   filename         = data.archive_file.cognito_post_confirmation.output_path
   source_code_hash = data.archive_file.cognito_post_confirmation.output_base64sha256
   handler          = "index.lambda_handler"
@@ -73,7 +73,7 @@ resource "aws_lambda_function" "cognito_post_confirmation" {
 }
 
 resource "aws_lambda_function" "kb_ingestion_trigger" {
-  function_name    = "${local.name_prefix}-kb-ingestion"
+  function_name    = "${local.scenario_name}-kb-ingestion-${local.scenario_id}"
   filename         = data.archive_file.kb_ingestion_trigger.output_path
   source_code_hash = data.archive_file.kb_ingestion_trigger.output_base64sha256
   handler          = "index.lambda_handler"
@@ -90,7 +90,7 @@ resource "aws_lambda_function" "kb_ingestion_trigger" {
 }
 
 resource "aws_lambda_function" "source_link_issuer" {
-  function_name    = "${local.name_prefix}-source-link-issuer"
+  function_name    = "${local.scenario_name}-source-link-issuer-${local.scenario_id}"
   filename         = data.archive_file.source_link_issuer.output_path
   source_code_hash = data.archive_file.source_link_issuer.output_base64sha256
   handler          = "index.lambda_handler"
@@ -107,7 +107,7 @@ resource "aws_lambda_function" "source_link_issuer" {
 }
 
 resource "aws_lambda_function" "chat_backend" {
-  function_name    = "${local.name_prefix}-chat-backend"
+  function_name    = "${local.scenario_name}-chat-backend-${local.scenario_id}"
   filename         = data.archive_file.chat_backend.output_path
   source_code_hash = data.archive_file.chat_backend.output_base64sha256
   handler          = "index.lambda_handler"

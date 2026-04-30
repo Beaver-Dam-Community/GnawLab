@@ -6,7 +6,7 @@
 #   per AWS documented limitation -> the LLM-side hinge of the chain).
 
 resource "aws_bedrockagent_knowledge_base" "main" {
-  name     = "${local.name_prefix}-kb"
+  name     = "${local.scenario_name}-kb-${local.scenario_id}"
   role_arn = aws_iam_role.bedrock_kb.arn
 
   knowledge_base_configuration {
@@ -54,7 +54,7 @@ resource "aws_bedrockagent_data_source" "public_prefix" {
 # Guardrail. PROMPT_ATTACK on user inputs only (Bedrock-documented behaviour -
 # does not inspect KB-retrieved chunks, which is the LLM-side hinge).
 resource "aws_bedrock_guardrail" "main" {
-  name                      = "${local.name_prefix}-guardrail"
+  name                      = "${local.scenario_name}-guardrail-${local.scenario_id}"
   description               = "TokTok-Support PROMPT_ATTACK + PII guardrail"
   blocked_input_messaging   = "I cannot help with that request."
   blocked_outputs_messaging = "I cannot share that information."
@@ -87,7 +87,7 @@ resource "aws_bedrock_guardrail_version" "main" {
 
 # Agent with KB association ONLY. No action group.
 resource "aws_bedrockagent_agent" "main" {
-  agent_name                  = "${local.name_prefix}-support-agent"
+  agent_name                  = "${local.scenario_name}-support-agent-${local.scenario_id}"
   agent_resource_role_arn     = aws_iam_role.bedrock_agent.arn
   foundation_model            = var.agent_model_id
   idle_session_ttl_in_seconds = 1800

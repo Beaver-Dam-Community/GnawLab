@@ -5,14 +5,14 @@
 # WAFv2 IP allow list. Must live in us-east-1 for CloudFront.
 # ------------------------------------------------------------
 resource "aws_wafv2_ip_set" "console" {
-  name               = "${local.name_prefix}-console-ipset"
+  name               = "${local.scenario_name}-console-ipset-${local.scenario_id}"
   scope              = "CLOUDFRONT"
   ip_address_version = "IPV4"
   addresses          = local.cg_whitelist_list
 }
 
 resource "aws_wafv2_web_acl" "console" {
-  name  = "${local.name_prefix}-console-acl"
+  name  = "${local.scenario_name}-console-acl-${local.scenario_id}"
   scope = "CLOUDFRONT"
 
   default_action {
@@ -42,7 +42,7 @@ resource "aws_wafv2_web_acl" "console" {
 
   visibility_config {
     cloudwatch_metrics_enabled = true
-    metric_name                = "${local.name_prefix}-console-acl"
+    metric_name                = "${local.scenario_name}-console-acl-${local.scenario_id}"
     sampled_requests_enabled   = true
   }
 }
@@ -51,7 +51,7 @@ resource "aws_wafv2_web_acl" "console" {
 # CloudFront distribution: console (S3 origin) + /api/* (API GW origin).
 # ------------------------------------------------------------
 resource "aws_cloudfront_origin_access_control" "console" {
-  name                              = "${local.name_prefix}-console-oac"
+  name                              = "${local.scenario_name}-console-oac-${local.scenario_id}"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"

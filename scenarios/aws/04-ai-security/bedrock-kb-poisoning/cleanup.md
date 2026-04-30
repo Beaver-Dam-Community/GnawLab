@@ -80,9 +80,10 @@ scenario "any-state-destroyable" — but if `terraform destroy` reports a
 Serverless, run the section that matches the failing resource and re-run
 `terraform destroy`.
 
-> All snippets below filter on the per-deployment `scenario_id`-derived
-> prefix (`gnawlab-bkp-*` for IAM/Lambda/Cognito and `bkp-*` for OpenSearch
-> Serverless). They will not touch other scenarios in the same account.
+> All snippets below filter on the shared `gnawlab-bkp-` prefix that every
+> resource in this scenario shares (the trailing `-${scenario_id}` keeps
+> them unique per deployment). They will not touch other scenarios in the
+> same account.
 
 ### 1. Bedrock Agent (delete alias → agent)
 
@@ -124,7 +125,7 @@ done
 
 ```bash
 for c in $(aws opensearchserverless list-collections \
-             --query "collectionSummaries[?starts_with(name, 'bkp-kb-')].name" \
+             --query "collectionSummaries[?starts_with(name, 'gnawlab-bkp-')].name" \
              --output text); do
   cid=$(aws opensearchserverless batch-get-collection --names "$c" \
           --query 'collectionDetails[0].id' --output text)
@@ -133,14 +134,14 @@ done
 
 for kind in encryption network; do
   for p in $(aws opensearchserverless list-security-policies --type "$kind" \
-               --query "securityPolicySummaries[?starts_with(name, 'bkp-')].name" \
+               --query "securityPolicySummaries[?starts_with(name, 'gnawlab-bkp-')].name" \
                --output text); do
     aws opensearchserverless delete-security-policy --type "$kind" --name "$p" || true
   done
 done
 
 for p in $(aws opensearchserverless list-access-policies --type data \
-             --query "accessPolicySummaries[?starts_with(name, 'bkp-')].name" \
+             --query "accessPolicySummaries[?starts_with(name, 'gnawlab-bkp-')].name" \
              --output text); do
   aws opensearchserverless delete-access-policy --type data --name "$p" || true
 done

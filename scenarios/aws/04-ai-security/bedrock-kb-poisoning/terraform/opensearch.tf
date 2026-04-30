@@ -2,7 +2,7 @@
 # Bedrock KB needs its data-access policy to include the KB execution role.
 
 resource "aws_opensearchserverless_security_policy" "kb_encryption" {
-  name = "${local.oss_prefix}-enc"
+  name = "${local.scenario_name}-enc-${local.scenario_id}"
   type = "encryption"
 
   policy = jsonencode({
@@ -17,7 +17,7 @@ resource "aws_opensearchserverless_security_policy" "kb_encryption" {
 }
 
 resource "aws_opensearchserverless_security_policy" "kb_network" {
-  name = "${local.oss_prefix}-net"
+  name = "${local.scenario_name}-net-${local.scenario_id}"
   type = "network"
 
   policy = jsonencode([
@@ -38,7 +38,7 @@ resource "aws_opensearchserverless_security_policy" "kb_network" {
 }
 
 resource "aws_opensearchserverless_access_policy" "kb_data_access" {
-  name = "${local.oss_prefix}-dap"
+  name = "${local.scenario_name}-dap-${local.scenario_id}"
   type = "data"
 
   policy = jsonencode([

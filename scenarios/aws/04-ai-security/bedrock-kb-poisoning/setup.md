@@ -208,7 +208,9 @@ account, and destroy from any state without scripts:
   first apply and pinned in `terraform.tfstate`. Every globally / regionally
   unique name (`aws_s3_bucket`, `aws_iam_role`, `aws_cognito_user_pool`,
   `aws_bedrockagent_*`, `aws_opensearchserverless_collection`, KMS alias, …)
-  is suffixed with this id. **Re-applying never recreates these resources.**
+  follows the GnawLab convention `gnawlab-bkp-<resource>-${scenario_id}`,
+  matching `s3-data-heist`, `secrets-extraction`, etc. **Re-applying never
+  recreates these resources.**
 - Two parallel deployments? `cp -r terraform terraform-second && cd
   terraform-second && terraform init && terraform apply`. The second copy
   generates its own `scenario_id` and lives alongside the first without name

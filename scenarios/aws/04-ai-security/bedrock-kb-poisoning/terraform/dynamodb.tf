@@ -7,7 +7,7 @@
 # in source_link_issuer Lambda code (the documented vulnerability).
 
 resource "aws_dynamodb_table" "document_catalog" {
-  name         = "${local.name_prefix}-document-catalog"
+  name         = "${local.scenario_name}-document-catalog-${local.scenario_id}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "document_id"
 

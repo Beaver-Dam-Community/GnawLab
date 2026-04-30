@@ -111,10 +111,11 @@ FLAG{<customer_id>}
 - [cleanup.md](./cleanup.md) — remove all resources
 
 > **Self-contained & repeatable.** Every globally / regionally unique resource
-> name is suffixed with a per-deployment 8-char `scenario_id` (a `random_string`
-> generated on first `terraform apply`), so the same AWS account can host
-> multiple parallel deployments of this scenario without name collisions. The
-> Terraform module also carries destroy-time hooks (`null_resource` with
+> follows the GnawLab convention `gnawlab-bkp-<resource>-${scenario_id}`
+> (matching `s3-data-heist`, `secrets-extraction`, `metadata-pivot`), where
+> `scenario_id` is an 8-char `random_string` pinned per deployment. The same
+> AWS account can host multiple parallel deployments without name collisions,
+> and the Terraform module ships destroy-time hooks (`null_resource` with
 > `when = destroy`) that cancel in-flight Bedrock KB ingestion jobs and purge
 > the versioned workspace bucket, so `terraform destroy` is a single command
 > from any state — no manual pre-destroy script required.
