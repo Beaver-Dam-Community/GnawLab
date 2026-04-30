@@ -73,7 +73,7 @@ Confirm the API is working normally.
    http://internal-source-ip/api/v1/legacy/media-info?source=...
    ```
 
-![IDOR Enumeration](./assets/images/legacy-bridge-idor-enumeration.png)
+![IDOR Enumeration](./assets/image/legacy-bridge-idor-enumeration.png)
 
 ### Method 2: CLI
 
@@ -127,7 +127,7 @@ curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://example.com"
    ```
 5. Save the role name
 
-![IMDS Role Extraction](./assets/images/legacy-bridge-imds-role-extraction.png)
+![IMDS Role Extraction](./assets/image/legacy-bridge-imds-role-extraction.png)
 
 ### Method 2: CLI
 
@@ -164,7 +164,7 @@ Extract the role name in the format `legacy-bridge-Shadow-API-Role-xxx` from the
    ```
 5. Save all credential information
 
-![IMDS Credentials Extraction](./assets/images/legacy-bridge-imds-credentials-extraction.png)
+![IMDS Credentials Extraction](./assets/image/legacy-bridge-imds-credentials-extraction.png)
 
 ### Method 2: CLI
 
