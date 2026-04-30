@@ -11,5 +11,5 @@ terraform destroy
 
 If you created any resources manually during the scenario, remove them before running `terraform destroy`:
 
-- [ ] Resource 1
-- [ ] Resource 2
+- [ ] Local credentials/environment variables cleared
+- [ ] AWS CLI profile configurations removed

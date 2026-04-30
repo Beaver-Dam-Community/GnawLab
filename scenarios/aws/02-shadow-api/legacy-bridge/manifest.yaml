@@ -1,0 +1,6 @@
+- name: legacy-bridge
+- author: Hyung Eun Son
+- version: 1.0
+- help: |
+    Exploit an undocumented v1 backend to perform IDOR → SSRF → IMDSv1 credential theft → S3 data exfiltration attacks.
+- last-updated: 04-30-2026

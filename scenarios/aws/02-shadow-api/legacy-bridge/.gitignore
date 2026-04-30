@@ -1,0 +1,30 @@
+# Terraform state files
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfstate
+terraform/*.tfstate.*
+
+# Local terraform variables
+terraform/terraform.tfvars
+terraform/terraform.tfvars.json
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+
+# Build artifacts
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.temp
