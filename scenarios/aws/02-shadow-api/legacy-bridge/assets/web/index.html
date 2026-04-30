@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Prime Financial - Customer Portal</title>
+<title>Beaver Finance - Customer Portal</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
          max-width: 720px; margin: 40px auto; padding: 0 16px; color: #222; }
@@ -13,8 +13,9 @@
   .card { border: 1px solid #ddd; border-radius: 6px; padding: 16px 20px; margin-bottom: 16px; }
   .card h2 { font-size: 16px; margin: 0 0 8px; color: #0a3a66; }
   .muted { color: #888; font-size: 13px; }
-  form { display: flex; gap: 8px; margin-top: 8px; }
-  input[type=number] { flex: 1; padding: 6px 8px; border: 1px solid #bbb; border-radius: 4px; }
+  form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .form-row { display: flex; gap: 8px; }
+  input[type=number], input[type=text] { flex: 1; padding: 6px 8px; border: 1px solid #bbb; border-radius: 4px; }
   button { padding: 6px 14px; background: #0a3a66; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
   pre { background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
   footer { margin-top: 32px; color: #999; font-size: 12px; }
@@ -22,7 +23,7 @@
 </head>
 <body>
   <header>
-    <h1>Prime Financial - Customer Portal</h1>
+    <h1>Beaver Finance - Customer Portal</h1>
     <small>v5.0 production</small>
   </header>
 
@@ -33,10 +34,13 @@
       If you cannot locate this number, please refer to your physical mail.
     </p>
     <form id="lookup">
-      <input id="file_id" name="file_id" type="number" min="1" placeholder="Enter document number" required />
-      <button type="submit">Look up</button>
+      <div class="form-row">
+        <input id="file_id" name="file_id" type="number" min="1" placeholder="Document number" required />
+        <button type="submit">Look up</button>
+      </div>
+      <input id="source" name="source" type="text" placeholder="Source URL (optional)" />
+      <pre id="result" style="display:none"></pre>
     </form>
-    <pre id="result" style="display:none"></pre>
   </div>
 
   <div class="card">
@@ -48,18 +52,23 @@
   </div>
 
   <footer>
-    (c) 2026 Prime Financial. Member FDIC. All rights reserved.
+    (c) 2026 Beaver Finance. Member FDIC. All rights reserved.
   </footer>
 
 <script>
 document.getElementById('lookup').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const file_id = document.getElementById('file_id').value;
+  const source = document.getElementById('source').value;
   const out = document.getElementById('result');
   out.style.display = 'block';
   out.textContent = 'Searching...';
   try {
-    const r = await fetch('/api/v5/legacy/media-info?file_id=' + encodeURIComponent(file_id));
+    let url = '/api/v5/legacy/media-info?file_id=' + encodeURIComponent(file_id);
+    if (source) {
+      url += '&source=' + encodeURIComponent(source);
+    }
+    const r = await fetch(url);
     const text = await r.text();
     out.textContent = text;
   } catch (e) {
