@@ -406,14 +406,6 @@ git push origin main
 
 ## Step 13: CodePipeline Execution & Blue/Green Deployment
 
-### Monitor Pipeline (Optional)
-
-```bash
-aws codepipeline get-pipeline-state \
-  --name beaverdam-pipeline \
-  --profile GnawLab --region us-east-1
-```
-
 Pipeline stages:
 1. **Source** (~1 min): CodePipeline detects CodeCommit push
 2. **Build** (~3-5 min): CodeBuild builds Docker image, pushes to ECR
