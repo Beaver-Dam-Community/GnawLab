@@ -29,7 +29,7 @@ The security team believed these legacy systems were isolated, but a misconfigur
 
 - 1 EC2 instance (Public-Gateway-Server) - v5 portal with forwarding vulnerability
 - 1 EC2 instance (Shadow-API-Server) - unprotected v1 legacy node
-- 1 S3 bucket (beaver-pii-vault) - stores customer credit card application data
+- 1 S3 bucket (legacy-bridge-pii-vault-`<suffix>`) - stores customer credit card application data
 - 1 IAM role (Gateway-App-Role) - SSM access only
 - 1 IAM role (Shadow-API-Role) - S3 bucket read access
 
@@ -47,8 +47,8 @@ Download the flag file from S3.
 
 ## Setup & Cleanup
 
-- [[setup.md](./setup.md)] - Deploy scenario infrastructure with Terraform
-- [[cleanup.md](./cleanup.md)] - Remove all resources
+- [setup.md](./setup.md) - Deploy scenario infrastructure with Terraform
+- [cleanup.md](./cleanup.md) - Remove all resources
 
 > **Warning:** This scenario creates real AWS resources that may incur costs. Be sure to clean up after the exercise.
 
@@ -56,18 +56,17 @@ Download the flag file from S3.
 
 ```mermaid
 flowchart TB
-    A[File ID Enumeration] --> B[IDOR Discovery]
-    B --> C[internal_source Found]
-    C --> D[Test source Parameter]
-    D --> E[SSRF Confirmed]
-    E --> F[Access IMDSv1]
-    F --> G[Extract Role Name]
-    G --> H[Steal STS Credentials]
-    H --> I[Validate Credentials]
-    I --> J[Check IAM Permissions]
-    J --> K[Access S3 Bucket]
-    K --> L[Exfiltrate Data]
-    L --> M[FLAG Obtained]
+    A[Beaver Finance Portal v5] --> B[IDOR via file_id]
+    B --> C[internal_source Hostname Leaked]
+    C --> D[SSRF via source Parameter]
+    D --> E[IMDSv1 169.254.169.254]
+    E --> F[IAM Role Name Extracted]
+    F --> G[Temporary Credentials Stolen]
+    G --> H[sts:GetCallerIdentity]
+    H --> I[iam:ListRolePolicies]
+    I --> J[iam:GetRolePolicy]
+    J --> K[s3:ListBucket + s3:GetObject]
+    K --> L[FLAG]
 ```
 
-See [[walkthrough.md](./walkthrough.md)] for detailed exploitation steps.
+See [walkthrough.md](./walkthrough.md) for detailed exploitation steps.

