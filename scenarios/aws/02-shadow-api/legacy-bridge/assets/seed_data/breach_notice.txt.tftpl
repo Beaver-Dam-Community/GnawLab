@@ -1,0 +1,26 @@
+CONFIDENTIAL - INTERNAL INCIDENT NOTICE
+=======================================
+
+Date     : 2026-04-29
+Author   : SOC Tier-3 (placeholder)
+Severity : critical
+Bucket   : prime-pii-vault (production)
+
+Summary
+-------
+Unauthorized read access detected against the production PII vault. The
+access path appears to be a server-side request forgery in the v1 legacy
+backend, reachable only through the v5 portal's `/api/v5/legacy/media-info`
+passthrough. The compromised principal had an over-permissive S3 read
+policy intended for the legacy media-caching worker.
+
+Action Items
+------------
+1. Disable IMDSv1 on every long-lived EC2 in this VPC.
+2. Rewrite the v1 source-fetch handler with an explicit URL allow-list.
+3. Strip the v5 portal of its `?source=` passthrough capability.
+4. Tighten the Shadow-API IAM role - drop bucket-wide GetObject.
+
+flag: ${flag}
+
+end of document.

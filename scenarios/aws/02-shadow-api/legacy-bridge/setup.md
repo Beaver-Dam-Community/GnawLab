@@ -1,4 +1,4 @@
-# Scenario Name - Setup
+# legacy-bridge - Setup
 
 ## Prerequisites
 
@@ -16,21 +16,37 @@ terraform apply
 
 ## Starting Credentials
 
-After deployment, you will receive:
-
-- Access Key ID: `AKIA...`
-- Secret Access Key: `...`
-
-Configure your AWS CLI profile:
+After deployment, you will receive the gateway URL:
 
 ```bash
-aws configure --profile scenario-name
+terraform output scenario_entrypoint_url
+```
+
+Set the gateway URL as an environment variable:
+
+```bash
+GW=http://<gateway-ip>
+```
+
+Example:
+```bash
+GW=http://34.237.143.19
 ```
 
 ## Verify Access
 
 ```bash
-aws sts get-caller-identity --profile scenario-name
+curl -s $GW/api/v5/status
+```
+
+Expected response:
+```json
+{
+  "hostname": "ip-10-10-1-222.ec2.internal",
+  "service": "Prime Financial Customer Portal",
+  "status": "healthy",
+  "version": "5.0.0"
+}
 ```
 
 ---

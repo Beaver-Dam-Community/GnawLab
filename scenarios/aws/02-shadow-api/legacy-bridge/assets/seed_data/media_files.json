@@ -1,0 +1,14 @@
+[
+  {"file_id": 1,  "customer_name": "Aaron Whitfield",     "application_id": "APP-2024-000142", "file_name": "statement_2024_07.pdf",     "file_path": "users/1/statement_2024_07.pdf",     "uploaded_at": "2024-07-15T08:21:00Z"},
+  {"file_id": 2,  "customer_name": "Beatrice Okafor",     "application_id": "APP-2024-000287", "file_name": "id_front.jpg",              "file_path": "users/2/id_front.jpg",              "uploaded_at": "2024-07-19T14:02:00Z"},
+  {"file_id": 3,  "customer_name": "Carlos Mendoza",      "application_id": "APP-2024-000391", "file_name": "signed_agreement.pdf",      "file_path": "users/3/signed_agreement.pdf",      "uploaded_at": "2024-08-02T10:55:00Z"},
+  {"file_id": 4,  "customer_name": "Devika Rao",          "application_id": "APP-2024-007391", "file_name": "income_verification.pdf",   "file_path": "users/4/income_verification.pdf",   "uploaded_at": "2024-08-11T17:33:00Z"},
+  {"file_id": 5,  "customer_name": "Erik Hallstrom",      "application_id": "APP-2024-000508", "file_name": "address_proof.png",         "file_path": "users/5/address_proof.png",         "uploaded_at": "2024-08-22T09:12:00Z"},
+  {"file_id": 6,  "customer_name": "Fatima al-Sayed",     "application_id": "APP-2024-000644", "file_name": "credit_appeal_letter.pdf",  "file_path": "users/6/credit_appeal_letter.pdf",  "uploaded_at": "2024-09-03T13:48:00Z"},
+  {"file_id": 7,  "customer_name": "Grigor Petrosyan",    "application_id": "APP-2024-000801", "file_name": "ssn_card.jpg",              "file_path": "users/7/ssn_card.jpg",              "uploaded_at": "2024-09-09T11:02:00Z"},
+  {"file_id": 8,  "customer_name": "Hana Tanigawa",       "application_id": "APP-2024-000922", "file_name": "tax_return_2023.pdf",       "file_path": "users/8/tax_return_2023.pdf",       "uploaded_at": "2024-09-19T15:21:00Z"},
+  {"file_id": 9,  "customer_name": "Ian Foster-Brown",    "application_id": "APP-2024-001033", "file_name": "drivers_license.jpg",       "file_path": "users/9/drivers_license.jpg",       "uploaded_at": "2024-10-01T07:44:00Z"},
+  {"file_id": 10, "customer_name": "Joon-Ho Park",        "application_id": "APP-2024-001188", "file_name": "wire_transfer_receipt.pdf", "file_path": "users/10/wire_transfer_receipt.pdf","uploaded_at": "2024-10-12T12:30:00Z"},
+  {"file_id": 11, "customer_name": "Kavita Sundaram",     "application_id": "APP-2024-001302", "file_name": "rental_agreement.pdf",      "file_path": "users/11/rental_agreement.pdf",     "uploaded_at": "2024-10-23T09:07:00Z"},
+  {"file_id": 12, "customer_name": "Liam O'Connor",       "application_id": "APP-2024-001488", "file_name": "passport_scan.pdf",         "file_path": "users/12/passport_scan.pdf",        "uploaded_at": "2024-11-04T18:52:00Z"}
+]
