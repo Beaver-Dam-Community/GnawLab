@@ -73,7 +73,7 @@ API가 정상 작동함을 확인합니다.
    http://internal-source-ip/api/v1/legacy/media-info?source=...
    ```
 
-![IDOR Enumeration](./assets/images/legacy-bridge-idor-enumeration.png)
+![IDOR Enumeration](./assets/image/legacy-bridge-idor-enumeration.png)
 
 ### 방법 2: CLI 사용
 
@@ -127,7 +127,7 @@ curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://example.com"
    ```
 5. 역할 이름을 메모합니다
 
-![IMDS Role Extraction](./assets/images/legacy-bridge-imds-role-extraction.png)
+![IMDS Role Extraction](./assets/image/legacy-bridge-imds-role-extraction.png)
 
 ### 방법 2: CLI 사용
 
@@ -164,7 +164,7 @@ curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/la
    ```
 5. 모든 자격증명 정보 메모
 
-![IMDS Credentials Extraction](./assets/images/legacy-bridge-imds-credentials-extraction.png)
+![IMDS Credentials Extraction](./assets/image/legacy-bridge-imds-credentials-extraction.png)
 
 ### 방법 2: CLI 사용
 
