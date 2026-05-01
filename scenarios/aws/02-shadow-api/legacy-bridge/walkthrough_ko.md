@@ -84,6 +84,8 @@ done
 3. **Look up** 클릭
 4. 응답에 `example.com`에서 가져온 내용이 포함되는지 확인
 
+![SSRF 확인](./assets/image/legacy-bridge-example.png)
+
 ### 방법 2: CLI 사용
 ```bash
 GW=http://<gateway-ip>

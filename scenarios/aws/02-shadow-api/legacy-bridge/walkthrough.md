@@ -84,6 +84,8 @@ The optional Source URL field is passed directly to the backend. Test whether ar
 3. Click **Look up**
 4. Confirm the response contains content fetched from `example.com`
 
+![SSRF Confirmation](./assets/image/legacy-bridge-example.png)
+
 ### Method 2: Using CLI
 ```bash
 GW=http://<gateway-ip>
