@@ -33,13 +33,21 @@ aws sts get-caller-identity --profile GnawLab
 cd terraform
 ```
 
-## Step 3: Initialize Terraform
+## Step 3: (Optional) Check Your Public IP
+
+The scenario will auto-detect your IP for whitelisting. You can verify:
+
+```bash
+curl -s https://ifconfig.co/ip
+```
+
+## Step 4: Initialize Terraform
 
 ```bash
 terraform init
 ```
 
-## Step 4: Review the Plan
+## Step 5: Review the Plan
 
 ```bash
 terraform plan
@@ -50,10 +58,11 @@ Review the resources that will be created:
 - 1 Internet Gateway, NAT Gateway, and Route Tables
 - 2 EC2 instances (Public-Gateway-Server, Shadow-API-Server)
 - 2 Security Groups (Public, Private)
-- 1 S3 bucket (`legacy-bridge-pii-vault-<suffix>`) with encryption and PII seed data
+- 1 S3 bucket (prime-pii-vault) with encryption and PII seed data
 - 2 IAM Roles (Gateway-App-Role with SSM access, Shadow-API-Role with S3 read access)
+- 1 VPC Endpoint (SSM)
 
-## Step 5: Deploy the Scenario
+## Step 6: Deploy the Scenario
 
 ```bash
 terraform apply
@@ -63,7 +72,7 @@ Type `yes` when prompted.
 
 > **Note:** Deployment takes 2-3 minutes. The EC2 instances need time to boot, install dependencies, and start services.
 
-## Step 6: Get the Gateway URL
+## Step 7: Get the Gateway URL
 
 ```bash
 terraform output scenario_entrypoint_url
@@ -81,7 +90,7 @@ Save the URL as an environment variable:
 GW=http://<gateway-ip>
 ```
 
-## Step 7: Verify the Application
+## Step 8: Verify the Application
 
 Wait 2-3 minutes after deployment, then check the gateway status:
 
@@ -100,7 +109,7 @@ Expected response:
 }
 ```
 
-## Step 8: Start the Challenge!
+## Step 9: Start the Challenge!
 
 Explore the web application and find the vulnerabilities. Your goal is to extract PII data from the S3 bucket using IDOR and SSRF attacks to steal AWS credentials.
 
@@ -111,6 +120,12 @@ Now find the flag! See [walkthrough.md](./walkthrough.md) if you need hints.
 Create `terraform.tfvars` for custom settings:
 
 ```hcl
+# Optional: Specify IP manually (auto-detected by default)
+whitelist_ip = "YOUR.PUBLIC.IP/32"
+
+# Optional: Use different AWS profile for deployment
+profile = "my-admin-profile"
+
 # Optional: Custom flag value
 flag_value = "FLAG{custom_flag_here}"
 ```
@@ -127,6 +142,16 @@ aws ec2 describe-instances \
   --query 'Reservations[*].Instances[*].[InstanceId,State.Name]' \
   --profile GnawLab --region us-east-1
 ```
+
+### "Access Denied" or connection timeout
+
+Your IP may have changed since deployment. Re-run:
+
+```bash
+terraform apply
+```
+
+This will update the IP whitelist.
 
 ### Terraform state issues
 
@@ -150,7 +175,7 @@ Check EC2 instance system logs:
 
 ```bash
 INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=Public-Gateway-Server-*" \
+  --filters "Name=tag:Name,Values=legacy-bridge-public-gateway" \
   --query 'Reservations[0].Instances[0].InstanceId' \
   --output text --profile GnawLab)
 
@@ -160,10 +185,11 @@ aws ec2 get-console-output --instance-id $INSTANCE_ID --profile GnawLab
 ## Cost Estimate
 
 This scenario uses:
-- EC2 instances (t3.micro x2): ~$0.021/hour
+- EC2 instances (t3.medium x2): ~$0.042/hour
 - NAT Gateway: ~$0.045/hour
-- S3 storage (`legacy-bridge-pii-vault-<suffix>`): ~$0.023/month
+- S3 storage (prime-pii-vault): ~$0.023/month
+- VPC Endpoint: ~$0.01/hour
 
-**Estimated cost: ~$0.07/hour**
+**Estimated cost: ~$0.10/hour**
 
 Always run `terraform destroy` when finished to avoid charges.
