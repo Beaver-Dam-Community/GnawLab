@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -eux
+exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+dnf install -y python3 python3-pip
+
+mkdir -p /opt/api_v5/static
+python3 -m venv /opt/api_v5/venv
+/opt/api_v5/venv/bin/python -m pip install --upgrade pip
+/opt/api_v5/venv/bin/python -m pip install flask requests
+
+cat > /opt/api_v5/app.py <<'PYEOF'
+${app_source}
+PYEOF
+chmod 644 /opt/api_v5/app.py
+
+cat > /opt/api_v5/static/index.html <<'HTMLEOF'
+${index_html}
+HTMLEOF
+chmod 644 /opt/api_v5/static/index.html
+
+cat > /opt/api_v5/media_files.json <<'JSONEOF'
+${media_data}
+JSONEOF
+chmod 644 /opt/api_v5/media_files.json
+
+cat > /etc/systemd/system/v5-portal.service <<'UNIT'
+[Unit]
+Description=Prime Financial - v5 Portal API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/api_v5
+ExecStart=/opt/api_v5/venv/bin/python /opt/api_v5/app.py
+Restart=always
+RestartSec=3
+User=root
+Environment=PYTHONUNBUFFERED=1
+Environment=SHADOW_API_HOST=${shadow_api_host}
+Environment=MEDIA_DATA_PATH=/opt/api_v5/media_files.json
+Environment=STATIC_DIR=/opt/api_v5/static
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now v5-portal.service
