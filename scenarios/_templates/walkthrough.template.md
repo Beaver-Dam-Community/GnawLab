@@ -1,29 +1,26 @@
 # Scenario Name - Walkthrough
 
-## Exploitation Route
+## Attack Path
 
-![Exploitation Route](exploitation_route.png)
-
-## Summary
-
-1. Step 1 summary
-2. Step 2 summary
-3. ...
-
-## Detailed Walkthrough
-
-### Step 1: Title
-
-Description and commands
-
-```bash
-aws s3 ls --profile victim
+```mermaid
+flowchart TB
+    A[Starting Point] --> B[Step 1]
+    B --> C[Step 2]
+    C --> D[FLAG]
 ```
 
-### Step 2: Title
+## Step 1: Identity Confirmation
 
-Description and commands
+(Verify who you are)
 
-```bash
-# example command
-```
+## Step 2: Permission Enumeration
+
+(Enumerate all available permissions)
+
+## Step 3: Exploit
+
+(Execute attack based on discovered permissions)
+
+## Step 4: Capture the Flag
+
+(Retrieve the flag)

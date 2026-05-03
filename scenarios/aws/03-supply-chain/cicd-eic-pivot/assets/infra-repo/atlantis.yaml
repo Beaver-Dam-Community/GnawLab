@@ -1,0 +1,18 @@
+version: 3
+projects:
+- name: infra-production
+  dir: .
+  autoplan:
+    enabled: true
+    when_modified: ["*.tf", "*.tfvars", "atlantis.yaml"]
+  terraform_version: v1.5.0
+  apply_requirements: [approved]
+workflows:
+  default:
+    plan:
+      steps:
+      - init
+      - plan
+    apply:
+      steps:
+      - apply
