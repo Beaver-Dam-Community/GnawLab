@@ -2,7 +2,7 @@
 
 **Difficulty:** Hard
 **Estimated Time:** 60–90 min (≈25 min `terraform apply`, then attack)
-**Category:** ai-security / multi-hop / RAG abuse
+**Type:** multi-hop
 
 ## Overview
 

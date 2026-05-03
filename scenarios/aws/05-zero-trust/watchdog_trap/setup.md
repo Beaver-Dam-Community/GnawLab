@@ -39,16 +39,16 @@ When finished:
 
 ## Option 2: Manual Setup
 
-### Step 1: Configure AWS Credentials
+### Step 1: Configure AWS CLI Profile
 
 ```bash
-aws configure
+aws configure --profile GnawLab
 ```
 
 Verify:
 
 ```bash
-aws sts get-caller-identity
+aws sts get-caller-identity --profile GnawLab
 ```
 
 ### Step 2: Navigate to Terraform Directory

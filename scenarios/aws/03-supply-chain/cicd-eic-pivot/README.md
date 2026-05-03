@@ -2,7 +2,7 @@
 
 **Difficulty:** Medium  
 **Estimated Time:** 60 min  
-**Category:** multi-hop
+**Type:** multi-hop
 
 ## Overview
 

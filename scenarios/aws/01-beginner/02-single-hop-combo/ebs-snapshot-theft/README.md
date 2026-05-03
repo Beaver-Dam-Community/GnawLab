@@ -2,7 +2,7 @@
 
 **Difficulty:** Medium  
 **Estimated Time:** 35 min  
-**Category:** single-hop-combo
+**Type:** single-hop-combo
 
 ## Overview
 
