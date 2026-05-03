@@ -2,7 +2,7 @@
 
 **Difficulty:** Easy  
 **Estimated Time:** 30 min  
-**Category:** Shadow API
+**Type:** multi-hop
 
 ## Overview
 

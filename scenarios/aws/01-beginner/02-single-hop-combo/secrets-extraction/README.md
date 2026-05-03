@@ -2,7 +2,7 @@
 
 **Difficulty:** Easy  
 **Estimated Time:** 30 min  
-**Category:** single-hop
+**Type:** single-hop-combo
 
 ## Overview
 

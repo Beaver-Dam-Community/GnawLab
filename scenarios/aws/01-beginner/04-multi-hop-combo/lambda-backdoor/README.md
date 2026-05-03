@@ -2,7 +2,7 @@
 
 **Difficulty:** Hard  
 **Estimated Time:** 50 min  
-**Category:** multi-hop-combo
+**Type:** multi-hop-combo
 
 ## Overview
 
