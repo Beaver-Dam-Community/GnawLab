@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="GnawLab Logo" width="300"/>
+  <img src="logo.png" alt="GnawLab Logo" width="600"/>
 </p>
 
 <h1 align="center">GnawLab</h1>
