@@ -285,7 +285,7 @@ Replace `<SCENARIO_ID>` with the actual suffix found in Query 1.
 
 The log contains:
 ```
-Cloning https://dev-user-at-813333281808:aPGIl74wWyZC0HKpHnXUzM0LUYTlxzZRZv0WThIrTEjCC3iURHrbqUQNYhU=@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
+Cloning https://dev-user-at-123456789012:<PASSWORD>@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
 ```
 
 ### Method 2: SSTI curl (Alternative)
@@ -306,8 +306,8 @@ https://<USERNAME>:<PASSWORD>@git-codecommit.us-east-1.amazonaws.com/v1/repos/be
 
 Extracted:
 ```
-Username: dev-user-at-813333281808
-Password: aPGIl74wWyZC0HKpHnXUzM0LUYTlxzZRZv0WThIrTEjCC3iURHrbqUQNYhU=
+Username: dev-user-at-123456789012
+Password: <PASSWORD>
 ```
 
 > **Note:** If the password contains `/`, it will appear URL-encoded as `%2F`. Use the encoded form when cloning.
@@ -344,7 +344,7 @@ Note the **hostname** and **port** — embed these in the task definition.
 ### 12.1 Clone the Repository
 
 ```bash
-git clone https://dev-user-at-813333281808:aPGIl74wWyZC0HKpHnXUzM0LUYTlxzZRZv0WThIrTEjCC3iURHrbqUQNYhU=@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
+git clone https://dev-user-at-123456789012:<PASSWORD>@git-codecommit.us-east-1.amazonaws.com/v1/repos/beaverdam-config
 cd beaverdam-config
 ```
 
@@ -444,7 +444,7 @@ FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}
 8. Steampipe Browser (http://<WSL_IP>:9194)
    ↓ SELECT … ORDER BY timestamp ASC LIMIT 50
 9. CloudWatch Log → Git Credentials
-   ↓ dev-user-at-813333281808:<PASSWORD>
+   ↓ dev-user-at-123456789012:<PASSWORD>
 10. git clone beaverdam-config
     ↓ task-definition.json → add bash reverse shell command
 11. git push origin main

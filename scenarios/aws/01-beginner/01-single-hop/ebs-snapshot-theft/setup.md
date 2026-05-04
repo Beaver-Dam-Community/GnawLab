@@ -1,4 +1,4 @@
-# Metadata Pivot - Setup Guide
+# EBS Snapshot Theft - Setup Guide
 
 ## Prerequisites
 
@@ -35,7 +35,7 @@ cd terraform
 
 ## Step 3: (Optional) Check Your Public IP
 
-The scenario will auto-detect your IP for whitelisting. You can verify:
+The scenario will auto-detect your IP for SSH whitelisting. You can verify:
 
 ```bash
 curl -s https://ifconfig.co/ip
@@ -55,11 +55,13 @@ terraform plan
 
 Review the resources that will be created:
 - 1 VPC with public subnet
-- 1 Internet Gateway and Route Table
-- 1 Security Group (HTTP access)
-- 1 EC2 Instance with vulnerable web application
-- 1 IAM Role and Instance Profile
-- 1 S3 Bucket with objects
+- 1 Internet Gateway and Route Tables
+- 1 Security Group (SSH access)
+- 1 IAM User with access key
+- 1 IAM Policy (inline)
+- 1 EBS Volume with sensitive data
+- 1 EBS Snapshot (target for attacker)
+- 1 Temporary EC2 instance (for setup, will be terminated)
 
 ## Step 6: Deploy the Scenario
 
@@ -69,26 +71,43 @@ terraform apply
 
 Type `yes` when prompted.
 
-> **Note:** Deployment takes 1-2 minutes. The EC2 instance needs time to initialize and start the web application.
+> **Note:** Deployment takes 2-3 minutes. A temporary EC2 instance is created to write data to the volume, then terminated after the snapshot is created.
 
-## Step 7: Get the Web Application URL
+## Step 7: Get the Leaked Credentials
 
 ```bash
-terraform output web_app_url
+terraform output -json leaked_credentials
 ```
 
 Example output:
-```
-"http://<EC2_PUBLIC_IP>"
+```json
+{
+  "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+  "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+}
 ```
 
-## Step 8: Verify the Application
+## Step 8: Configure Victim Profile
 
-Wait 1-2 minutes after deployment, then access the URL in your browser. You should see the **Beaver Dam Bank - Custom Card Designer** with a card preview feature.
+Configure a separate AWS CLI profile for the challenge:
+
+```bash
+aws configure --profile victim
+```
+
+Enter the leaked credentials from Step 7:
+- AWS Access Key ID: `<leaked-access-key>`
+- AWS Secret Access Key: `<leaked-secret-key>`
+- Default region name: `us-east-1`
+- Default output format: `json`
 
 ## Step 9: Start the Challenge!
 
-Explore the web application and find the vulnerability. The card designer allows customers to personalize their credit cards with custom images by providing an image URL. Your goal is to extract the flag from S3 storage.
+Verify the credentials work:
+
+```bash
+aws sts get-caller-identity --profile victim
+```
 
 Now find the flag! See [walkthrough.md](./walkthrough.md) if you need hints.
 
@@ -109,18 +128,7 @@ flag_value = "FLAG{custom_flag_here}"
 
 ## Troubleshooting
 
-### Web application not loading
-
-The EC2 user_data script takes 1-2 minutes to complete. Check instance status:
-
-```bash
-aws ec2 describe-instances \
-  --filters "Name=tag:Scenario,Values=metadata-pivot" \
-  --query "Reservations[].Instances[].State.Name" \
-  --profile GnawLab
-```
-
-### "Access Denied" or connection timeout
+### "Access Denied" errors during challenge
 
 Your IP may have changed since deployment. Re-run:
 
@@ -149,10 +157,11 @@ aws_secret_access_key = YOUR_ADMIN_SECRET
 ## Cost Estimate
 
 This scenario uses:
-- EC2 t3.micro: ~$0.01/hour
-- S3 Bucket: ~$0.01/month (minimal storage)
-- VPC/IGW: Free
+- EC2 Instance (t3.micro, temporary): ~$0.01 (terminated after setup)
+- EBS Volume (1 GB gp3): ~$0.08/month
+- EBS Snapshot (1 GB): ~$0.05/month
+- VPC/Networking: Free
 
-**Estimated cost: ~$0.25/day**
+**Estimated cost: < $0.15/month**
 
-Always run `terraform destroy` when finished to avoid charges.
+Always run `terraform destroy` when finished to avoid any charges.

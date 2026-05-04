@@ -138,8 +138,8 @@ Output:
 ```json
 {
     "UserId": "AROAYLHCQFX5YD3UECYUI:i-0dd0b83924907fd88",
-    "Account": "573853150715",
-    "Arn": "arn:aws:sts::573853150715:assumed-role/gnawlab-metapivot-role-aaq0ljoj/i-0dd0b83924907fd88"
+    "Account": "123456789012",
+    "Arn": "arn:aws:sts::123456789012:assumed-role/gnawlab-metapivot-role-aaq0ljoj/i-0dd0b83924907fd88"
 }
 ```
 
@@ -199,7 +199,7 @@ Output:
                     "iam:ListAttachedRolePolicies",
                     "iam:GetRolePolicy"
                 ],
-                "Resource": "arn:aws:iam::573853150715:role/gnawlab-metapivot-role-aaq0ljoj"
+                "Resource": "arn:aws:iam::123456789012:role/gnawlab-metapivot-role-aaq0ljoj"
             },
             {
                 "Sid": "S3BucketEnumeration",
@@ -261,7 +261,7 @@ Output:
 2026-03-26 00:48:05 aria-export-0715-igppevfo
 2025-12-28 05:48:34 beaverdam-homepage
 2026-03-26 00:51:13 cf-templates-1cncwitnvx5u7-ap-northeast-2
-2025-04-06 14:30:55 elasticbeanstalk-us-east-1-573853150715
+2025-04-06 14:30:55 elasticbeanstalk-us-east-1-123456789012
 2026-05-01 06:46:26 gnawlab-metapivot-data-aaq0ljoj
 ```
 
