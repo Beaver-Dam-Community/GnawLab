@@ -45,12 +45,56 @@ terraform apply
 terraform destroy
 ```
 
+### 4. Terraform Requirements
+
+Every scenario must include IP whitelist for network-accessible resources:
+
+**Required files:**
+- `variables.tf`: `whitelist_ip` variable with auto-detect default
+- `data.tf`: `data "http" "my_ip"` block for auto-detection
+- `locals.tf`: `whitelist_cidr` computed from variable or auto-detect
+
+**Example pattern** (see `s3-data-heist/terraform/` for reference):
+
+```hcl
+# variables.tf
+variable "whitelist_ip" {
+  description = "IP address to whitelist (CIDR). Leave empty to auto-detect."
+  type        = string
+  default     = ""
+}
+
+# data.tf
+data "http" "my_ip" {
+  url = "https://ifconfig.co/ip"
+}
+
+# locals.tf
+locals {
+  whitelist_cidr = var.whitelist_ip != "" ? var.whitelist_ip : "${chomp(data.http.my_ip.response_body)}/32"
+}
+```
+
+Use `local.whitelist_cidr` in security groups and bucket policies for access control.
+
 ## Scenario Guidelines
 
 - All content must be in **English**
 - Difficulty levels: `Easy`, `Medium`, `Hard`, `Expert`
 - Include real-world reference with source
 - `Learning Objectives` section: only for `01-beginner` category
+
+## Security Guidelines
+
+### Placeholder Rules
+- AWS Account ID: `123456789012` (AWS official example)
+- Access Key ID: `AKIAIOSFODNN7EXAMPLE` or `AKIAXXXXXXXXXXXXXXXX`
+- Secret Access Key: `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` or `xxxxxxxx`
+- Session Token: `xxxxxxxx...` or mask actual values
+
+### Prohibited
+- Real AWS Account ID (12-digit numbers)
+- Real credentials (Access Key, Secret Key, Password)
 
 ## Walkthrough Writing Guidelines
 

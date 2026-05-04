@@ -1,4 +1,4 @@
-# Metadata Pivot - Setup Guide
+# Policy Rollback - Setup Guide
 
 ## Prerequisites
 
@@ -54,12 +54,9 @@ terraform plan
 ```
 
 Review the resources that will be created:
-- 1 VPC with public subnet
-- 1 Internet Gateway and Route Table
-- 1 Security Group (HTTP access)
-- 1 EC2 Instance with vulnerable web application
-- 1 IAM Role and Instance Profile
-- 1 S3 Bucket with objects
+- 1 IAM User with Access Key
+- 1 Customer Managed Policy with 3 versions
+- 1 Secrets Manager Secret containing the flag
 
 ## Step 6: Deploy the Scenario
 
@@ -69,26 +66,43 @@ terraform apply
 
 Type `yes` when prompted.
 
-> **Note:** Deployment takes 1-2 minutes. The EC2 instance needs time to initialize and start the web application.
+> **Note:** Deployment takes about 1 minute. The null_resource provisioners create additional policy versions via AWS CLI.
 
-## Step 7: Get the Web Application URL
+## Step 7: Get the Leaked Credentials
 
 ```bash
-terraform output web_app_url
+terraform output -json leaked_credentials
 ```
 
 Example output:
-```
-"http://<EC2_PUBLIC_IP>"
+```json
+{
+  "aws_access_key_id": "AKIAXXXXXXXXXXXXXXXX",
+  "aws_secret_access_key": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+}
 ```
 
-## Step 8: Verify the Application
+## Step 8: Configure Victim Profile
 
-Wait 1-2 minutes after deployment, then access the URL in your browser. You should see the **Beaver Dam Bank - Custom Card Designer** with a card preview feature.
+Configure a new AWS CLI profile with the leaked credentials:
+
+```bash
+aws configure --profile victim
+```
+
+Enter the leaked credentials:
+- AWS Access Key ID: `<from output>`
+- AWS Secret Access Key: `<from output>`
+- Default region name: `us-east-1`
+- Default output format: `json`
 
 ## Step 9: Start the Challenge!
 
-Explore the web application and find the vulnerability. The card designer allows customers to personalize their credit cards with custom images by providing an image URL. Your goal is to extract the flag from S3 storage.
+Verify your access:
+
+```bash
+aws sts get-caller-identity --profile victim
+```
 
 Now find the flag! See [walkthrough.md](./walkthrough.md) if you need hints.
 
@@ -109,31 +123,15 @@ flag_value = "FLAG{custom_flag_here}"
 
 ## Troubleshooting
 
-### Web application not loading
+### Policy version creation failed
 
-The EC2 user_data script takes 1-2 minutes to complete. Check instance status:
-
-```bash
-aws ec2 describe-instances \
-  --filters "Name=tag:Scenario,Values=metadata-pivot" \
-  --query "Reservations[].Instances[].State.Name" \
-  --profile GnawLab
-```
-
-### "Access Denied" or connection timeout
-
-Your IP may have changed since deployment. Re-run:
+The scenario uses AWS CLI to create additional policy versions. Ensure:
+- AWS CLI is installed and in PATH
+- The `GnawLab` profile has IAM permissions
 
 ```bash
-terraform apply
-```
-
-This will update the IP whitelist.
-
-### Terraform state issues
-
-```bash
-terraform refresh
+aws --version
+aws iam list-policies --profile GnawLab --max-items 1
 ```
 
 ### Profile not found
@@ -146,13 +144,18 @@ aws_access_key_id = YOUR_ADMIN_KEY
 aws_secret_access_key = YOUR_ADMIN_SECRET
 ```
 
+### Terraform state issues
+
+```bash
+terraform refresh
+```
+
 ## Cost Estimate
 
 This scenario uses:
-- EC2 t3.micro: ~$0.01/hour
-- S3 Bucket: ~$0.01/month (minimal storage)
-- VPC/IGW: Free
+- IAM User & Policy: Free
+- Secrets Manager: ~$0.40/month
 
-**Estimated cost: ~$0.25/day**
+**Estimated cost: < $0.50/month**
 
-Always run `terraform destroy` when finished to avoid charges.
+Always run cleanup when finished to avoid charges.

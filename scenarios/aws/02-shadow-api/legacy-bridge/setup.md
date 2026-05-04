@@ -81,7 +81,7 @@ terraform output scenario_entrypoint_url
 Example output:
 
 ```
-"http://34.237.143.19"
+"http://<GATEWAY_IP>"
 ```
 
 Save the URL as an environment variable:
