@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BeaverPay - Developer Portal</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 720px;
+    margin: 40px auto;
+    padding: 0 16px;
+    color: #222;
+    background: #f8f9fa;
+  }
+  header {
+    background: #1a3a5c;
+    color: #fff;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header small { opacity: 0.7; font-size: 13px; }
+  .card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .card h2 { font-size: 16px; margin: 0 0 8px; color: #1a3a5c; }
+  .muted { color: #888; font-size: 13px; margin-bottom: 12px; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: #e8f4fd;
+    color: #1a3a5c;
+    margin-bottom: 12px;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: #666; }
+  .info-value { font-weight: 500; font-family: monospace; word-break: break-all; text-align: right; }
+  .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #28a745;
+    margin-right: 6px;
+  }
+  /* Login form */
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block;
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 4px;
+  }
+  .form-group input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .form-group input:focus { border-color: #1a3a5c; }
+  .btn {
+    width: 100%;
+    padding: 10px;
+    background: #1a3a5c;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn:hover { background: #14304f; }
+  .btn:disabled { background: #aaa; cursor: not-allowed; }
+  .error-msg {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: #fff3f3;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    color: #c0392b;
+    font-size: 13px;
+    display: none;
+  }
+  /* Credentials block */
+  .creds-box {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #d4d4d4;
+    white-space: pre;
+    overflow-x: auto;
+    margin-bottom: 10px;
+    line-height: 1.7;
+  }
+  .copy-btn {
+    font-size: 12px;
+    padding: 5px 14px;
+    background: #e8f4fd;
+    color: #1a3a5c;
+    border: 1px solid #b8d9f5;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 12px;
+  }
+  .copy-btn:hover { background: #d0eaf9; }
+  .creds-loading {
+    color: #888;
+    font-size: 13px;
+    padding: 8px 0;
+  }
+  .creds-error {
+    color: #c0392b;
+    font-size: 13px;
+    padding: 8px 0;
+    display: none;
+  }
+  footer {
+    margin-top: 32px;
+    color: #999;
+    font-size: 12px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🦫 BeaverPay Developer Portal</h1>
+    <small>Collaborator Access — B2B Integration Environment</small>
+  </header>
+
+  <!-- Login -->
+  <div class="card" id="login-card">
+    <h2>Collaborator Sign In</h2>
+    <p class="muted">Sign in with your BeaverPay collaborator account to access developer resources.</p>
+    <div class="form-group">
+      <label for="email">Email</label>
+      <input type="email" id="email" placeholder="you@example.com" autocomplete="username" />
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button class="btn" id="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="error-msg" id="error-msg"></div>
+  </div>
+
+  <!-- Dashboard (shown after login) -->
+  <div id="dashboard" style="display:none;">
+
+    <div class="card">
+      <h2>Welcome back, <span id="user-email" style="color:#1a3a5c;"></span></h2>
+      <span class="badge"><span class="status-dot"></span>Authenticated</span>
+      <div class="info-row">
+        <span class="info-label">Identity Pool</span>
+        <span class="info-value" id="identity-pool-display"></span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Identity ID</span>
+        <span class="info-value" id="identity-id-display">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Credentials Expire</span>
+        <span class="info-value" id="creds-expiry-display">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Auth Flow</span>
+        <span class="info-value">USER_PASSWORD_AUTH</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>AWS Temporary Credentials</h2>
+      <p class="muted">Copy these credentials to your terminal to access AWS services as the CollaboratorDeveloperRole.</p>
+      <div class="creds-loading" id="creds-loading">Obtaining credentials from Identity Pool...</div>
+      <div id="creds-content" style="display:none;">
+        <div class="creds-box" id="creds-box"></div>
+        <button class="copy-btn" id="copy-creds-btn">Copy as env vars</button>
+      </div>
+      <div class="creds-error" id="creds-error"></div>
+    </div>
+
+    <div class="card">
+      <h2>Collaborator Resources</h2>
+      <p class="muted">The following AWS services are available to authenticated collaborators.</p>
+      <div class="info-row">
+        <span class="info-label">CI/CD</span>
+        <span class="info-value">AWS CodeBuild</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Image Registry</span>
+        <span class="info-value">AWS ECR</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Runtime</span>
+        <span class="info-value">AWS ECS Fargate</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Portal info (always visible) -->
+  <div class="card">
+    <h2>Portal Status</h2>
+    <span class="badge"><span class="status-dot"></span>All systems operational</span>
+    <div class="info-row">
+      <span class="info-label">Environment</span>
+      <span class="info-value">production</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Region</span>
+      <span class="info-value">us-east-1</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Portal Version</span>
+      <span class="info-value">v2.1.0</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Auth Provider</span>
+      <span class="info-value">AWS Cognito</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Access Information</h2>
+    <p class="muted">
+      Use your registered email and password to authenticate via the Cognito endpoint below.
+    </p>
+    <div class="info-row">
+      <span class="info-label">Auth Endpoint</span>
+      <span class="info-value">cognito-idp.us-east-1.amazonaws.com</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Auth Flow</span>
+      <span class="info-value">USER_PASSWORD_AUTH</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">MFA</span>
+      <span class="info-value">Optional</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Collaborator Resources</h2>
+    <p class="muted">
+      Authenticated collaborators may access the following AWS services
+      using credentials obtained via the Cognito Identity Pool.
+    </p>
+    <div class="info-row">
+      <span class="info-label">CI/CD</span>
+      <span class="info-value">AWS CodeBuild</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Image Registry</span>
+      <span class="info-value">AWS ECR</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Runtime</span>
+      <span class="info-value">AWS ECS Fargate</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Support</h2>
+    <p class="muted">
+      For access issues, contact your BeaverPay account manager.
+      All portal activity is logged for security and compliance purposes.
+    </p>
+  </div>
+
+  <footer>
+    &copy; 2024 BeaverPay Inc. All rights reserved. Unauthorized access is prohibited.
+  </footer>
+
+<script>
+let _cfg = null;
+
+async function getConfig() {
+  if (_cfg) return _cfg;
+  const res = await fetch('/config');
+  _cfg = await res.json();
+  return _cfg;
+}
+
+async function doLogin() {
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('error-msg');
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+
+  try {
+    const cfg = await getConfig();
+
+    const authRes = await fetch(
+      `https://cognito-idp.${cfg.region}.amazonaws.com/`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-amz-json-1.1',
+          'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth'
+        },
+        body: JSON.stringify({
+          AuthFlow: 'USER_PASSWORD_AUTH',
+          ClientId: cfg.clientId,
+          AuthParameters: { USERNAME: email, PASSWORD: password }
+        })
+      }
+    );
+
+    const authData = await authRes.json();
+    if (!authRes.ok) {
+      throw new Error(authData.message || authData.__type || 'Authentication failed');
+    }
+
+    const auth = authData.AuthenticationResult;
+    const payload = JSON.parse(atob(auth.IdToken.split('.')[1]));
+
+    document.getElementById('user-email').textContent = payload.email || payload['cognito:username'];
+    document.getElementById('identity-pool-display').textContent = cfg.identityPoolId;
+
+    document.getElementById('login-card').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+
+    fetchIdentityCredentials(cfg, auth.IdToken);
+
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+async function fetchIdentityCredentials(cfg, idToken) {
+  const loginKey = `cognito-idp.${cfg.region}.amazonaws.com/${cfg.poolId}`;
+  const logins = { [loginKey]: idToken };
+  const idpBase = `https://cognito-identity.${cfg.region}.amazonaws.com/`;
+
+  try {
+    const getIdRes = await fetch(idpBase, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-amz-json-1.1',
+        'X-Amz-Target': 'AWSCognitoIdentityService.GetId'
+      },
+      body: JSON.stringify({
+        AccountId: cfg.accountId,
+        IdentityPoolId: cfg.identityPoolId,
+        Logins: logins
+      })
+    });
+    const getIdData = await getIdRes.json();
+    if (!getIdRes.ok) throw new Error(getIdData.message || 'GetId failed');
+    const identityId = getIdData.IdentityId;
+    document.getElementById('identity-id-display').textContent = identityId;
+
+    const getCredsRes = await fetch(idpBase, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-amz-json-1.1',
+        'X-Amz-Target': 'AWSCognitoIdentityService.GetCredentialsForIdentity'
+      },
+      body: JSON.stringify({
+        IdentityId: identityId,
+        Logins: logins
+      })
+    });
+    const getCredsData = await getCredsRes.json();
+    if (!getCredsRes.ok) throw new Error(getCredsData.message || 'GetCredentialsForIdentity failed');
+    const c = getCredsData.Credentials;
+
+    const expiry = new Date(c.Expiration * 1000);
+    document.getElementById('creds-expiry-display').textContent =
+      expiry.toISOString().replace('T', ' ').replace('.000Z', ' UTC');
+
+    const envBlock = [
+      `export AWS_ACCESS_KEY_ID="${c.AccessKeyId}"`,
+      `export AWS_SECRET_ACCESS_KEY="${c.SecretKey}"`,
+      `export AWS_SESSION_TOKEN="${c.SessionToken}"`,
+      `export AWS_DEFAULT_REGION="${cfg.region}"`
+    ].join('\n');
+
+    document.getElementById('creds-box').textContent = envBlock;
+    document.getElementById('creds-loading').style.display = 'none';
+    document.getElementById('creds-content').style.display = 'block';
+
+    document.getElementById('copy-creds-btn').onclick = function () {
+      const btn = this;
+      const fallback = () => {
+        const ta = document.createElement('textarea');
+        ta.value = envBlock;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy as env vars'; }, 1500);
+      };
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(envBlock).then(() => {
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = 'Copy as env vars'; }, 1500);
+        }).catch(fallback);
+      } else {
+        fallback();
+      }
+    };
+
+  } catch (e) {
+    document.getElementById('creds-loading').style.display = 'none';
+    const errEl = document.getElementById('creds-error');
+    errEl.textContent = 'Failed to obtain credentials: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+document.getElementById('password').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+</script>
+</body>
+</html>
