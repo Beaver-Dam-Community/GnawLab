@@ -34,13 +34,23 @@ aws sts get-caller-identity --profile GnawLab
 cd terraform
 ```
 
-## Step 3: Initialize Terraform
+## Step 3: (Optional) Check Your Public IP
+
+If you want to restrict portal access to your IP only, check your public IP first:
+
+```bash
+curl -s https://ifconfig.co/ip
+```
+
+See **Configuration Options** below to set it in `terraform.tfvars`.
+
+## Step 4: Initialize Terraform
 
 ```bash
 terraform init
 ```
 
-## Step 4: Review the Plan
+## Step 5: Review the Plan
 
 ```bash
 terraform plan
@@ -58,7 +68,7 @@ Resources that will be created:
 - 5 IAM Roles (CollaboratorDeveloperRole, ECS Task Role, ECS Execution Role, CodeBuild Service Role, portal EC2 role)
 - 3 Secrets Manager secrets (db credentials, payment gateway key, flag)
 
-## Step 5: Deploy the Scenario
+## Step 6: Deploy the Scenario
 
 ```bash
 terraform apply
@@ -68,7 +78,7 @@ Type `yes` when prompted.
 
 > **Note:** Deployment takes 3-5 minutes. A lightweight dummy image is automatically pushed to ECR during `terraform apply`. Allow ~2 minutes after apply for the portal user_data to complete.
 
-## Step 6: Get the Web Application URL
+## Step 7: Get the Web Application URL
 
 ```bash
 terraform output scenario_entrypoint_url
@@ -77,14 +87,14 @@ terraform output scenario_entrypoint_url
 Example output:
 
 ```
-"http://1.2.3.4/"
+"http://<portal-ip>/"
 ```
 
-## Step 7: Verify the Portal
+## Step 8: Verify the Portal
 
 Access the URL in your browser. You should see the **BeaverPay Developer Portal**.
 
-## Step 8: Hand Off to Participant
+## Step 9: Hand Off to Participant
 
 Provide only the following to the participant:
 
@@ -98,17 +108,46 @@ Now find the flag! See [walkthrough.md](./walkthrough.md) if you need hints.
 
 ## Configuration Options
 
-Customize via `terraform.tfvars`:
+Create `terraform.tfvars` for custom settings:
 
 ```hcl
-# Optional: Restrict portal access to specific IPs (default: open to all)
-whitelist_cidr = ["YOUR.PUBLIC.IP/32"]
+# Optional: Specify IP manually (auto-detected by default)
+whitelist_cidr = "YOUR.PUBLIC.IP/32"
+
+# Optional: Use different AWS profile for deployment
+profile = "my-admin-profile"
 
 # Optional: Custom flag value
 flag_value = "FLAG{custom_flag_here}"
 ```
 
 ## Troubleshooting
+
+### "Access Denied" errors during challenge
+
+Your IP may have changed since deployment. Re-run:
+
+```bash
+terraform apply
+```
+
+This will update the IP whitelist.
+
+### Terraform state issues
+
+```bash
+terraform refresh
+```
+
+### Profile not found
+
+Ensure the `GnawLab` profile exists in `~/.aws/credentials`:
+
+```ini
+[GnawLab]
+aws_access_key_id = YOUR_ADMIN_KEY
+aws_secret_access_key = YOUR_ADMIN_SECRET
+```
 
 ### Portal not loading
 
@@ -127,12 +166,6 @@ Docker may not be installed or running on your local machine. The initial ECR im
 
 ```bash
 terraform apply
-```
-
-### Terraform state issues
-
-```bash
-terraform refresh
 ```
 
 ## Cost Estimate

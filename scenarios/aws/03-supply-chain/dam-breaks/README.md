@@ -29,6 +29,8 @@ The build succeeded. The logs were clean. Nobody noticed.
   - [TechTarget: SolarWinds Attack Explained](https://www.techtarget.com/searchsecurity/ehandbook/SolarWinds-supply-chain-attack-explained-Need-to-know-info)
 - **AWS Cognito Credential Stuffing** - MFA-absent Cognito pools vulnerable to automated login attacks
   - [SUDO Consultants: Pentesting AWS Cognito](https://sudoconsultants.com/pentesting-aws-cognito-user-authentication-risks/)
+- **Cognito Identity Pool Excessive Privileges** - Abusing overpermissioned Identity Pools to obtain IAM credentials via JWT exchange
+  - [Hacking the Cloud: Cognito Identity Pool Excessive Privileges](https://hackingthe.cloud/aws/exploitation/cognito_identity_pool_excessive_privileges/)
 
 ## Learning Objectives
 

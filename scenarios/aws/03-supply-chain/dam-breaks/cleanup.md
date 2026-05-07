@@ -13,19 +13,18 @@ cd terraform
 
 ```bash
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION
-AWS_PROFILE=GnawLab terraform destroy -auto-approve
+terraform destroy
 ```
 
 > **Tip:** Alternatively, open a new terminal session — environment variables set with `export` do not persist across sessions.
 
+Type `yes` when prompted.
 
 ### Step 3: Verify Cleanup
 ```bash
 terraform show
 ```
 Should output: `No state.` or empty state.
-
----
 
 ## Manual Cleanup Checklist
 
@@ -83,49 +82,51 @@ If `terraform destroy` fails, manually delete these resources in order:
 ### AWS CLI
 
 ```bash
+# Set profile
+export AWS_PROFILE=GnawLab
 export AWS_REGION=us-east-1
 
-SUFFIX="<your-8-char-suffix>"
-SCENARIO="dam-breaks"
+# Find scenario ID from resource names
+SCENARIO_ID="<your-8-char-scenario-id>"
 
 # Delete ECS service and cluster
 aws ecs update-service \
-  --cluster ${SCENARIO}-prod-cluster-${SUFFIX} \
-  --service ${SCENARIO}-webapp-service-${SUFFIX} \
+  --cluster dam-breaks-prod-cluster-${SCENARIO_ID} \
+  --service dam-breaks-webapp-service-${SCENARIO_ID} \
   --desired-count 0
 aws ecs delete-service \
-  --cluster ${SCENARIO}-prod-cluster-${SUFFIX} \
-  --service ${SCENARIO}-webapp-service-${SUFFIX} \
+  --cluster dam-breaks-prod-cluster-${SCENARIO_ID} \
+  --service dam-breaks-webapp-service-${SCENARIO_ID} \
   --force
 aws ecs delete-cluster \
-  --cluster ${SCENARIO}-prod-cluster-${SUFFIX}
+  --cluster dam-breaks-prod-cluster-${SCENARIO_ID}
 
 # Delete CodeBuild projects
 aws codebuild delete-project \
-  --name ${SCENARIO}-webapp-prod-build-${SUFFIX}
+  --name dam-breaks-webapp-prod-build-${SCENARIO_ID}
 aws codebuild delete-project \
-  --name ${SCENARIO}-webapp-qa-build-${SUFFIX}
+  --name dam-breaks-webapp-qa-build-${SCENARIO_ID}
 
 # Delete ECR repository
 aws ecr delete-repository \
-  --repository-name ${SCENARIO}-beaverpay-webapp-${SUFFIX} \
+  --repository-name dam-breaks-beaverpay-webapp-${SCENARIO_ID} \
   --force
 
 # Delete Secrets Manager secrets (force delete)
 aws secretsmanager delete-secret \
-  --secret-id beaverpay/prod/flag-${SUFFIX} \
+  --secret-id beaverpay/prod/flag-${SCENARIO_ID} \
   --force-delete-without-recovery
 aws secretsmanager delete-secret \
-  --secret-id beaverpay/prod/db-master-credentials-${SUFFIX} \
+  --secret-id beaverpay/prod/db-master-credentials-${SCENARIO_ID} \
   --force-delete-without-recovery
 aws secretsmanager delete-secret \
-  --secret-id beaverpay/prod/payment-gateway-api-key-${SUFFIX} \
+  --secret-id beaverpay/prod/payment-gateway-api-key-${SCENARIO_ID} \
   --force-delete-without-recovery
 
 # Delete Cognito Identity Pool
 IDENTITY_POOL_ID=$(aws cognito-identity list-identity-pools \
   --max-results 10 \
-  --query "IdentityPools[?contains(IdentityPoolName, '${SCENARIO}')].IdentityPoolId" \
+  --query "IdentityPools[?contains(IdentityPoolName, 'dam-breaks')].IdentityPoolId" \
   --output text)
 aws cognito-identity delete-identity-pool \
   --identity-pool-id ${IDENTITY_POOL_ID}
@@ -133,30 +134,33 @@ aws cognito-identity delete-identity-pool \
 # Delete Cognito User Pool
 USER_POOL_ID=$(aws cognito-idp list-user-pools \
   --max-results 10 \
-  --query "UserPools[?contains(Name, '${SCENARIO}')].Id" \
+  --query "UserPools[?contains(Name, 'dam-breaks')].Id" \
   --output text)
 aws cognito-idp delete-user-pool \
   --user-pool-id ${USER_POOL_ID}
 ```
 
----
-
 ## Remove Local Files
 
 ```bash
+# Remove Terraform state and cache
 rm -rf terraform/.terraform
 rm -f terraform/.terraform.lock.hcl
 rm -f terraform/terraform.tfstate*
+
+# Remove tfvars if created
+rm -f terraform/terraform.tfvars
 ```
 
----
-
 ## Verify No Resources Remain
+
+Check for remaining resources by tag:
 
 ```bash
 aws resourcegroupstaggingapi get-resources \
   --tag-filters Key=Scenario,Values=dam-breaks \
-  --region us-east-1
+  --region us-east-1 \
+  --profile GnawLab
 ```
 
 Should return empty `ResourceTagMappingList`:
@@ -166,8 +170,6 @@ Should return empty `ResourceTagMappingList`:
     "ResourceTagMappingList": []
 }
 ```
-
----
 
 ## Cost Verification
 

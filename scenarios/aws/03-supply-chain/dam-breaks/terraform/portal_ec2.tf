@@ -51,8 +51,5 @@ resource "aws_instance" "portal_ec2" {
     NetworkTier = "public"
   }
 
-  depends_on = [
-    aws_cognito_user_pool.developer_portal_userpool,
-    aws_cognito_user_pool_client.portal_client,
-  ]
+
 }

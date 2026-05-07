@@ -4,6 +4,12 @@ variable "region" {
   default     = "us-east-1"
 }
 
+variable "profile" {
+  description = "AWS CLI profile to use for deployment"
+  type        = string
+  default     = "GnawLab"
+}
+
 variable "scenario_name" {
   description = "Scenario identifier — used as a prefix for tagging and naming"
   type        = string
@@ -17,28 +23,32 @@ variable "availability_zone" {
 }
 
 variable "vpc_cidr" {
-  type    = string
-  default = "10.10.0.0/16"
+  description = "CIDR block for the scenario VPC"
+  type        = string
+  default     = "10.10.0.0/16"
 }
 
 variable "public_subnet_cidr" {
-  type    = string
-  default = "10.10.1.0/24"
+  description = "CIDR block for the public subnet"
+  type        = string
+  default     = "10.10.1.0/24"
 }
 
 variable "instance_type" {
-  type    = string
-  default = "t3.micro"
+  description = "EC2 instance type for the developer portal"
+  type        = string
+  default     = "t3.micro"
 }
 
 variable "whitelist_cidr" {
-  description = "CIDR blocks allowed to access the developer portal. Defaults to open access."
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
+  description = "CIDR block allowed to access the developer portal. Use YOUR.PUBLIC.IP/32 to restrict access."
+  type        = string
+  default     = "0.0.0.0/0"
 }
 
 variable "flag_value" {
   description = "Flag stored in Secrets Manager — beaverpay/prod/flag"
   type        = string
+  sensitive   = true
   default     = "FLAG{th3_c0mm1t_w4s_cl34n_but_y0u_w3r3_n0t}"
 }
