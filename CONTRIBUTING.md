@@ -47,14 +47,16 @@ terraform destroy
 
 ### 4. Terraform Requirements
 
-Every scenario must include IP whitelist for network-accessible resources:
+#### IP Whitelist (for network-accessible scenarios only)
 
-**Required files:**
-- `variables.tf`: `whitelist_ip` variable with auto-detect default
-- `data.tf`: `data "http" "my_ip"` block for auto-detection
-- `locals.tf`: `whitelist_cidr` computed from variable or auto-detect
+**When is IP whitelist required?**
 
-**Example pattern** (see `s3-data-heist/terraform/` for reference):
+Ask: "Can an attacker on the internet directly reach any resource in this scenario?"
+
+- **YES** (EC2 with public IP, ALB, API Gateway, etc.) → IP whitelist REQUIRED
+- **NO** (IAM-only, Secrets Manager, EBS snapshots, etc.) → IP whitelist NOT required
+
+**If required, include these files** (see `s3-data-heist/terraform/` for reference):
 
 ```hcl
 # variables.tf
@@ -92,20 +94,40 @@ Use `local.whitelist_cidr` in security groups and bucket policies for access con
 - Secret Access Key: `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` or `xxxxxxxx`
 - Session Token: `xxxxxxxx...` or mask actual values
 
+### Generic Content Rule
+- All documentation must be generic and reusable
+- Do NOT include user-specific data (e.g., other buckets in your account, unrelated resources, personal resource names)
+- Command outputs should only show scenario-created resources
+- If other resources may appear, add a note like: "Your output may include other resources. Look for the pattern `gnawlab-*`."
+
 ### Prohibited
 - Real AWS Account ID (12-digit numbers)
 - Real credentials (Access Key, Secret Key, Password)
+- Real public IP addresses (use `<EC2_PUBLIC_IP>` or `x.x.x.x` placeholders)
+- User-specific resource names or data
+- Terraform state files (*.tfstate, *.tfstate.backup) - must be in .gitignore
 
 ## Walkthrough Writing Guidelines
 
 Walkthroughs must follow the **real attacker workflow**. Include every command an attacker would actually execute, not just the exploit commands.
 
-### Required Steps (Access Key Based Scenarios)
+### Attacker Mindset
 
-1. **Identity Confirmation** - Verify who you are with the compromised credentials
-2. **Permission Enumeration** - Enumerate ALL permissions (user inline, user attached, group membership, group inline, group attached policies)
-3. **Exploit** - Execute the attack based on discovered permissions
-4. **Capture the Flag** - Verify goal achieved and retrieve the flag
+Write from the perspective of an attacker who knows **nothing** about the environment at the start.
+
+- Every step must be justified by what was discovered in the previous step
+- Even empty results must be documented — they confirm a path is closed
+- The number of steps varies by scenario: a single-hop may need 3 steps, a multi-hop may need 8+
+
+### IAM Enumeration (Access Key Based Scenarios)
+
+Always start with identity confirmation, then enumerate exhaustively based on the identity type:
+
+**IAM User** (ARN contains `:user/`)
+→ inline policies → managed policies → group memberships → each group's inline and managed policies
+
+**IAM Role** (ARN contains `:assumed-role/`)
+→ inline role policies → managed role policies
 
 ### Why This Matters
 
