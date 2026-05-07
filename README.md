@@ -39,13 +39,13 @@ Just as beavers build dams piece by piece, we build cloud security knowledge ste
 | Category | Scenario | Status | Description |
 |----------|----------|--------|-------------|
 | **01-beginner** | [s3-data-heist](./scenarios/aws/01-beginner/01-single-hop/s3-data-heist/) | ✅ Available | S3 bucket misconfiguration exploitation |
+| | [ebs-snapshot-theft](./scenarios/aws/01-beginner/01-single-hop/ebs-snapshot-theft/) | ✅ Available | EBS snapshot exposure and data extraction |
 | | [metadata-pivot](./scenarios/aws/01-beginner/02-single-hop-combo/metadata-pivot/) | ✅ Available | SSRF to IMDS credential theft |
 | | [secrets-extraction](./scenarios/aws/01-beginner/02-single-hop-combo/secrets-extraction/) | ✅ Available | Secrets Manager extraction via command injection |
-| | [ebs-snapshot-theft](./scenarios/aws/01-beginner/02-single-hop-combo/ebs-snapshot-theft/) | 🚧 Coming Soon | EBS snapshot exposure |
-| | [policy-rollback](./scenarios/aws/01-beginner/02-single-hop-combo/policy-rollback/) | 🚧 Coming Soon | IAM policy version rollback |
+| | [policy-rollback](./scenarios/aws/01-beginner/02-single-hop-combo/policy-rollback/) | ✅ Available | IAM policy version rollback privilege escalation |
 | | [credential-chain](./scenarios/aws/01-beginner/03-multi-hop/credential-chain/) | 🚧 Coming Soon | Multi-hop credential pivoting |
-| | [ec2-role-hijack](./scenarios/aws/01-beginner/04-multi-hop-combo/ec2-role-hijack/) | 🚧 Coming Soon | EC2 instance role hijacking |
-| | [lambda-backdoor](./scenarios/aws/01-beginner/04-multi-hop-combo/lambda-backdoor/) | 🚧 Coming Soon | Lambda function backdoor injection |
+| | [ec2-role-hijack](./scenarios/aws/01-beginner/04-multi-hop-combo/ec2-role-hijack/) | 🚧 Coming Soon | EC2 instance role hijacking via PassRole |
+| | [lambda-backdoor](./scenarios/aws/01-beginner/04-multi-hop-combo/lambda-backdoor/) | 🚧 Coming Soon | Lambda function backdoor via PassRole |
 | **02-shadow-api** | [legacy-bridge](./scenarios/aws/02-shadow-api/legacy-bridge/) | ✅ Available | Shadow API discovery and exploitation |
 | **03-supply-chain** | [cicd-eic-pivot](./scenarios/aws/03-supply-chain/cicd-eic-pivot/) | ✅ Available | CI/CD pipeline exploitation via EIC |
 | **04-ai-security** | [bedrock-kb-poisoning](./scenarios/aws/04-ai-security/bedrock-kb-poisoning/) | ✅ Available | Bedrock Knowledge Base data poisoning |
