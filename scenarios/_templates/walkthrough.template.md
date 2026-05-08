@@ -1,31 +1,84 @@
 # Scenario Name - Walkthrough
 
-> **Security Note**: Use placeholders for all AWS Account IDs, Access Keys, and Secret Keys.
-> - Account ID: `123456789012`
-> - Access Key: `AKIAIOSFODNN7EXAMPLE` or `ASIAXXXXXXXXXXX`
-> - Secret Key: `xxxxxxxx` or mask actual values
+## Step 1: [Step Title]
 
-## Attack Path
+Description.
 
-```mermaid
-flowchart TB
-    A[Starting Point] --> B[Step 1]
-    B --> C[Step 2]
-    C --> D[FLAG]
+```bash
+# command
 ```
 
-## Step 1: Identity Confirmation
+Expected output:
+```
+...
+```
 
-(Verify who you are)
+---
 
-## Step 2: Permission Enumeration
+## Step 2: [Step Title]
 
-(Enumerate all available permissions)
+Description.
 
-## Step 3: Exploit
+```bash
+# command
+```
 
-(Execute attack based on discovered permissions)
+---
 
-## Step 4: Capture the Flag
+<!-- Add as many steps as the scenario requires -->
 
-(Retrieve the flag)
+---
+
+## Step N: Flag Extraction
+
+```bash
+# command to retrieve the flag
+```
+
+Output:
+```
+FLAG{...}
+```
+
+---
+
+## Attack Chain Summary
+
+```
+1. [Starting Point]
+   ↓ [action]
+2. [Step]
+   ↓ [result]
+N. FLAG{...}
+```
+
+---
+
+## Key Techniques
+
+### [Technique Name]
+
+```bash
+# reference commands
+```
+
+---
+
+## Lessons Learned
+
+### 1. [Lesson Title]
+
+- Key takeaway
+
+---
+
+## Remediation
+
+### [Fix Title]
+
+Description of how to fix the vulnerability.
+
+### Additional Security Measures
+
+1. **Measure 1**: Description
+2. **Measure 2**: Description

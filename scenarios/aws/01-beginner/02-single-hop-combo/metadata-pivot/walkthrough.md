@@ -258,14 +258,12 @@ aws s3 ls
 
 Output:
 ```
-2026-03-26 00:48:05 aria-export-0715-igppevfo
-2025-12-28 05:48:34 beaverdam-homepage
-2026-03-26 00:51:13 cf-templates-1cncwitnvx5u7-ap-northeast-2
-2025-04-06 14:30:55 elasticbeanstalk-us-east-1-123456789012
-2026-05-01 06:46:26 gnawlab-metapivot-data-aaq0ljoj
+2026-05-01 06:46:26 gnawlab-metapivot-data-xxxxxxxx
 ```
 
-Target bucket identified: `gnawlab-metapivot-data-aaq0ljoj`
+> **Note:** Your output may include other buckets in the account. Look for the bucket matching the pattern `gnawlab-metapivot-data-*`.
+
+Target bucket identified: `gnawlab-metapivot-data-xxxxxxxx`
 
 ### 8.2 List Bucket Contents
 

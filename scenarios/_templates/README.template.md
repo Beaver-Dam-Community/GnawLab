@@ -1,56 +1,51 @@
 # Scenario Name
 
-> **Security Note**: Use placeholders for all AWS Account IDs, Access Keys, and Secret Keys.
-> - Account ID: `123456789012`
-> - Access Key: `AKIAIOSFODNN7EXAMPLE` or `ASIAXXXXXXXXXXX`
-> - Secret Key: `xxxxxxxx` or mask actual values
-
-**Difficulty:** Easy | Medium | Hard | Expert  
-**Estimated Time:** 30 min  
-**Category:** access-key/single-hop
+**Difficulty:** Easy | Medium | Hard | Expert
+**Estimated Time:** 30 min
+**Type:** single-hop | single-hop-combo | multi-hop | multi-hop-combo
 
 ## Overview
 
-Brief description of the scenario.
+Brief description of the scenario. Include the fictional company name and the attacker's starting context.
+
+### References
+
+- **Real-world incident name (Year)** - Brief description of relevance
+  - [Source Title](URL)
+- MITRE ATT&CK: [TXXXX - Technique Name](https://attack.mitre.org/techniques/TXXXX/)
 
 ## Learning Objectives
 
-<!-- ONLY for beginner category scenarios - remove this section for other categories -->
-
-- What you will learn
+- What the learner will understand after completing this scenario
 
 ## Scenario Resources
 
-- AWS resources created by Terraform
-
-## Setup
-
-See [setup.md](./setup.md) for deployment instructions.
-
-> **Note:** This scenario creates real AWS resources that may incur costs.
+- AWS resources created by Terraform (e.g., 1 IAM User, 1 S3 Bucket)
 
 ## Starting Point
 
-What is given to the learner (Access Key, Shell, etc.)
+What is given to the learner:
+- AWS Access Key ID
+- AWS Secret Access Key
 
 ## Goal
 
-What the learner must achieve.
+What the learner must achieve (e.g., retrieve the flag from X).
 
-## Infrastructure Architecture
+## Setup & Cleanup
 
-![Architecture](architecture.png)
+- [setup.md](./setup.md) - Deploy scenario infrastructure
+- [cleanup.md](./cleanup.md) - Remove all resources
 
-## Real-world Reference
+> **Warning:** This scenario creates real AWS resources that may incur costs.
 
-> Source - "Title" (Description of real-world relevance)
+## Walkthrough
 
-## Cleanup
+```mermaid
+flowchart TB
+    A[Starting Point] --> B[Step 1]
+    B --> C[Step 2]
+    C --> D[FLAG]
+```
 
-When finished, see [cleanup.md](./cleanup.md) to remove all resources.
-
-> **Warning:** Always verify cleanup to avoid unexpected AWS costs.
-
----
-
-For detailed walkthrough, see [walkthrough.md](./walkthrough.md)
+See [walkthrough.md](./walkthrough.md) for detailed exploitation steps.
