@@ -539,6 +539,23 @@ Prowler and Steampipe must not be reachable from the webapp security group. Use 
 }
 ```
 
+### 6. Zero Trust — Internal Position Is Not an Identity
+
+This lab chains three "trust the network" assumptions, each of which a zero-trust posture would have invalidated:
+
+- **Internal dashboards exposed without authentication.** Prowler (`:9090`) and Steampipe (`:9194`) accept any request that arrives from inside the VPC. Once the attacker has RCE on the webapp, the entire security monitoring stack is reachable with no further credentials. Internal services must enforce identity (SSO / OIDC / mTLS) regardless of source IP or VPC.
+- **Network adjacency is not authorization.** The dashboard security group allows ingress from the webapp security group, treating any traffic that arrives via the corporate VPC as trusted. Authorization decisions must be tied to the request principal, not the network path.
+- **The CI/CD pipeline trusts its own source repository.** A single `git push origin main` triggers an automatic Build + Blue/Green Deploy with no human review, signed-commit verification, or task-definition diff approval. Pipelines must treat their own inputs as untrusted: require pull-request review, signed commits, and a manual approval stage before production deploy.
+
+### 7. Zero Trust — Assume Breach, Constrain Blast Radius
+
+Each stage of the kill chain assumes the previous stage is uncompromised. Zero-trust assumes any single component will fail and constrains blast radius:
+
+- **Never log secrets, and encrypt the log sinks anyway.** The CodeBuild buildspec embeds long-lived Git credentials and prints them to stdout; CloudWatch then stores the build log unencrypted. Treat every log sink as a public artifact: never write secrets to logs, and encrypt log groups with a customer-managed KMS key so even broad IAM read does not yield plaintext.
+- **Scope analytics roles to specific resources.** The Steampipe role grants `logs:GetLogEvents` and `logs:FilterLogEvents` on `Resource: "*"`, allowing it to read every log group in the account. Scope the analytics role to specific log group ARNs and avoid granting `logs:GetLogEvents` / `logs:FilterLogEvents` cluster-wide.
+- **Protect `main` against direct push.** The `dev-user` credential allows `codecommit:GitPush` to the config repo with no branch condition, so any holder of the credential can push to `main`. Add a Deny statement scoped to `refs/heads/main` and require pull-request review for production-bound branches.
+- **Validate task-definition mutations before deploy.** The pipeline accepts arbitrary `command` overrides from the source repository. Add a CodeDeploy `BeforeInstall` hook (or a Lambda admission check) that diffs the incoming task definition against the previous revision and rejects deployments that introduce unexpected `command`, `entryPoint`, or environment changes.
+
 ---
 
 ## Remediation
