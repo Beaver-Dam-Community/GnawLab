@@ -1,9 +1,7 @@
 # Dam Breaks
 
-**Difficulty:** Medium
-
-**Estimated Time:** 60 min
-
+**Difficulty:** Medium  
+**Estimated Time:** 60 min  
 **Category:** supply-chain
 
 ## Overview
@@ -60,23 +58,19 @@ The build succeeded. The logs were clean. Nobody noticed.
 
 ## Starting Point
 
-A developer portal URL and collaborator credentials are provided.
-Portal   : http://<portal-ip>/
-Email    : j.park@ottercode.kr
-Password : Otter2022!
+URL to the BeaverPay developer portal:
+- `http://<portal-ip>/`
 
 ## Goal
 
-Extract the FLAG from AWS Secrets Manager.
-Secret path: beaverpay/prod/flag-<suffix>
+Extract the flag stored in AWS Secrets Manager.
 
 ## Setup & Cleanup
 
-- [setup.md](./setup.md) - Deploy scenario infrastructure with Terraform
+- [setup.md](./setup.md) - Deploy scenario infrastructure
 - [cleanup.md](./cleanup.md) - Remove all resources
 
 > **Warning:** This scenario creates real AWS resources that may incur costs.
-> Be sure to clean up after the exercise.
 
 ## Walkthrough
 
@@ -92,10 +86,11 @@ flowchart TB
     H --> I[Malicious Docker Image Built]
     I --> J[ECR latest Push - MUTABLE Tag]
     J --> K[ECS Rolling Deploy - No Approval]
-    K --> L[Reverse Shell - Outbound Unrestricted]
-    L --> M[ECS Task Role Credentials]
-    M --> N[secretsmanager:GetSecretValue]
-    N --> O[FLAG]
+    K --> L[Malicious Container - ECS Task Role Inherited]
+    L --> M[secretsmanager:GetSecretValue]
+    M --> N[CloudWatch Logs - stdout captured]
+    N --> O[logs:FilterLogEvents]
+    O --> P[FLAG]
 ```
 
 See [walkthrough.md](./walkthrough.md) for detailed exploitation steps.

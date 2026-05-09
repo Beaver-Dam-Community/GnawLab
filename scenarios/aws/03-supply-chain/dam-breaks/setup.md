@@ -36,13 +36,11 @@ cd terraform
 
 ## Step 3: (Optional) Check Your Public IP
 
-If you want to restrict portal access to your IP only, check your public IP first:
+The scenario will auto-detect your IP for whitelisting. You can verify:
 
 ```bash
 curl -s https://ifconfig.co/ip
 ```
-
-See **Configuration Options** below to set it in `terraform.tfvars`.
 
 ## Step 4: Initialize Terraform
 
@@ -56,8 +54,7 @@ terraform init
 terraform plan
 ```
 
-Resources that will be created:
-
+Review the resources that will be created:
 - 1 VPC with public subnet, IGW, route tables
 - 2 Security Groups (portal, ECS task)
 - 1 EC2 instance (BeaverPay developer portal)
@@ -85,24 +82,17 @@ terraform output scenario_entrypoint_url
 ```
 
 Example output:
-
 ```
 "http://<portal-ip>/"
 ```
 
 ## Step 8: Verify the Portal
 
-Access the URL in your browser. You should see the **BeaverPay Developer Portal**.
+Wait 2-3 minutes after deployment, then access the URL in your browser. You should see the **BeaverPay Developer Portal**.
 
-## Step 9: Hand Off to Participant
+## Step 9: Start the Challenge!
 
-Provide only the following to the participant:
-
-```
-Portal   : http://<portal-ip>/
-Email    : j.park@ottercode.kr
-Password : Otter2022!
-```
+Access the portal and find the vulnerability. Your goal is to extract the flag from AWS Secrets Manager.
 
 Now find the flag! See [walkthrough.md](./walkthrough.md) if you need hints.
 
@@ -171,7 +161,6 @@ terraform apply
 ## Cost Estimate
 
 This scenario uses:
-
 - EC2 t3.micro (portal): ~$0.01/hour
 - ECS Fargate (0.25 vCPU, 0.5GB): ~$0.01/hour
 - CodeBuild (on demand): minimal

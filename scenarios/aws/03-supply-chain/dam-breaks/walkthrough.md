@@ -155,7 +155,7 @@ Output:
   iam:ListAttachedRolePolicies
   codebuild:ListProjects
   codebuild:BatchGetProjects
-  codebuild:StartBuild            ← !! no Condition on buildspec — override possible
+  codebuild:StartBuild            ← no Condition on buildspec — override possible
   codebuild:BatchGetBuilds
   ecr:GetAuthorizationToken
   ecr:DescribeRepositories

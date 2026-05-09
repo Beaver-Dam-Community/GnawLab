@@ -3,6 +3,7 @@
 ## Automated Cleanup (Recommended)
 
 ### Step 1: Navigate to Terraform Directory
+
 ```bash
 cd terraform
 ```
@@ -21,14 +22,16 @@ terraform destroy
 Type `yes` when prompted.
 
 ### Step 3: Verify Cleanup
+
 ```bash
 terraform show
 ```
+
 Should output: `No state.` or empty state.
 
 ## Manual Cleanup Checklist
 
-If `terraform destroy` fails, manually delete these resources in order:
+If Terraform destroy fails, manually delete these resources:
 
 ### AWS Console
 
