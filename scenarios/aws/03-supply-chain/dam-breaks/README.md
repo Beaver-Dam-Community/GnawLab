@@ -31,6 +31,10 @@ The build succeeded. The logs were clean. Nobody noticed.
   - [SUDO Consultants: Pentesting AWS Cognito](https://sudoconsultants.com/pentesting-aws-cognito-user-authentication-risks/)
 - **Cognito Identity Pool Excessive Privileges** - Abusing overpermissioned Identity Pools to obtain IAM credentials via JWT exchange
   - [Hacking the Cloud: Cognito Identity Pool Excessive Privileges](https://hackingthe.cloud/aws/exploitation/cognito_identity_pool_excessive_privileges/)
+- **buildspecOverride Mechanism** - Official AWS reference showing `buildspecOverride` as a legitimate parameter enabling dynamic buildspec switching at runtime — the normal feature this attack abuses
+  - [AWS Blog: Building a CI Workflow with Step Functions and CodeBuild](https://aws.amazon.com/ko/blogs/aws/new-building-a-continuous-integration-workflow-with-step-functions-and-aws-codebuild/)
+- **CodeBuild Privilege Escalation via CodeConnections** - Undocumented `CoFaTokenService_Agent.GetBuildInfo` API enabling GitHub App token exfiltration from within a CodeBuild job
+  - [Thomas Preece: Escalating Privileges via AWS CodeConnections](https://thomaspreece.com/2026/03/23/part-2-aws-codebuild-escalating-privileges-via-aws-codeconnections/)
 
 ## Learning Objectives
 
