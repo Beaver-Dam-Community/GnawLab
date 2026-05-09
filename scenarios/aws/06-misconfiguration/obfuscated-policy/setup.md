@@ -1,10 +1,5 @@
 # Obfuscated Policy - Setup Guide
 
-> **Security Note**: Use placeholders for all AWS Account IDs, Access Keys, and Secret Keys.
-> - Account ID: `123456789012`
-> - Access Key: `AKIAIOSFODNN7EXAMPLE` or `ASIAXXXXXXXXXXX`
-> - Secret Key: `xxxxxxxx` or mask actual values
-
 ## Prerequisites
 
 - [Terraform](https://www.terraform.io/downloads) >= 1.5.0
@@ -59,15 +54,14 @@ terraform plan
 ```
 
 Resources that will be created:
-- 1 IAM User with Access Key (the leaked credentials)
-- 1 IAM inline policy on the attacker user
-- 2 S3 Buckets (flag bucket + CloudTrail log bucket)
-- 1 S3 Object (the flag)
+- 1 IAM User with leaked Access Key (limited permissions)
+- 1 IAM Permission Boundary on the attacker user (single-account SCP equivalent)
+- 1 S3 Bucket containing the flag (IP whitelisted)
+- 1 S3 Bucket for CloudTrail log delivery
 - 1 CloudTrail trail (management events)
-- 1 EventBridge Rule (CreatePolicy / AttachUserPolicy)
-- 1 Lambda function (policy detection)
-- 1 IAM Role for the Lambda (with inline policy)
-- 1 CloudWatch Log Group for the Lambda
+- 1 EventBridge Rule (matches `CreatePolicy`, `AttachUserPolicy`)
+- 1 Lambda function performing literal-pattern policy detection
+- 1 IAM Role for the detection Lambda
 
 ## Step 6: Deploy the Scenario
 

