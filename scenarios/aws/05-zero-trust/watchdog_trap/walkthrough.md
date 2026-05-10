@@ -418,7 +418,7 @@ echo $FLAG
 ![FLAG captured](./images/step14-flag.png)
 
 ```
-FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}
+FLAG{deploy_pipeline_hijack_complete}
 ```
 
 ---
@@ -453,7 +453,7 @@ FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}
     ↓
 13. ECS Task starts → reverse shell caught → echo $FLAG
     ↓
-14. FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}
+14. FLAG{deploy_pipeline_hijack_complete}
 ```
 
 ---
