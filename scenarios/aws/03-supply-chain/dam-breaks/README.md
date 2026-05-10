@@ -30,15 +30,15 @@ The build succeeded. The logs were clean. Nobody noticed.
 - **Cognito Identity Pool Excessive Privileges** - Abusing overpermissioned Identity Pools to obtain IAM credentials via JWT exchange
   - [Hacking the Cloud: Cognito Identity Pool Excessive Privileges](https://hackingthe.cloud/aws/exploitation/cognito_identity_pool_excessive_privileges/)
 - **buildspecOverride Mechanism** - Official AWS reference showing `buildspecOverride` as a legitimate parameter enabling dynamic buildspec switching at runtime — the normal feature this attack abuses
-  - [AWS Blog: Building a CI Workflow with Step Functions and CodeBuild](https://aws.amazon.com/ko/blogs/aws/new-building-a-continuous-integration-workflow-with-step-functions-and-aws-codebuild/)
-- **CodeBuild Privilege Escalation via CodeConnections** - Undocumented `CoFaTokenService_Agent.GetBuildInfo` API enabling GitHub App token exfiltration from within a CodeBuild job
-  - [Thomas Preece: Escalating Privileges via AWS CodeConnections](https://thomaspreece.com/2026/03/23/part-2-aws-codebuild-escalating-privileges-via-aws-codeconnections/)
+  - [AWS Blog: Building a CI Workflow with Step Functions and CodeBuild](https://aws.amazon.com/blogs/aws/new-building-a-continuous-integration-workflow-with-step-functions-and-aws-codebuild/)
+- **AWS CodeBuild Buildspec Reference** - Official documentation for the buildspec file format, including all override parameters available at build invocation time
+  - [AWS Docs: Buildspec Reference](https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html)
 
 ## Learning Objectives
 
 - Understand why Cognito with MFA disabled is vulnerable to credential stuffing
 - Understand how Cognito Identity Pool converts JWT into AWS IAM credentials
-- Enumerate AWS permissions using Pacu against a real IAM role
+- Enumerate AWS permissions using `iam:SimulatePrincipalPolicy` against a real IAM role
 - Exploit `buildspecOverride` to hijack a CodeBuild pipeline without modifying Git
 - Understand why MUTABLE ECR tags and Rolling ECS deployment create risk
 - Understand how ECS Task Role credentials are inherited by containers automatically
@@ -81,16 +81,16 @@ flowchart TB
     B --> C[Cognito USER_PASSWORD_AUTH]
     C --> D[JWT Token]
     D --> E[Cognito Identity Pool]
-    E --> F[CollaboratorDeveloperRole Credentials]
-    F --> G[Pacu iam__enum_permissions]
-    G --> H[codebuild:StartBuild Allowed]
-    H --> I[buildspecOverride - No Condition]
-    I --> J[Malicious Docker Image Built]
-    J --> K[ECR latest Push - MUTABLE Tag]
-    K --> L[ECS Rolling Deploy - No Approval]
-    L --> M[Malicious Container - ECS Task Role Inherited]
+    E --> F[CollaboratorDeveloperRole\nCredentials]
+    F --> G[iam:SimulatePrincipalPolicy]
+    G --> H[codebuild:StartBuild\nAllowed]
+    H --> I[buildspecOverride\nNo IAM Condition]
+    I --> J[Malicious Docker\nImage Built]
+    J --> K[ECR :latest Push\nMUTABLE Tag]
+    K --> L[ECS Rolling Deploy\nNo Approval Gate]
+    L --> M[Malicious Container\nECS Task Role Inherited]
     M --> N[secretsmanager:GetSecretValue]
-    N --> O[CloudWatch Logs - stdout captured]
+    N --> O[CloudWatch Logs\nstdout captured]
     O --> P[logs:FilterLogEvents]
     P --> Q[FLAG]
 ```

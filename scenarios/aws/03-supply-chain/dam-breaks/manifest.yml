@@ -4,7 +4,7 @@
 - category: supply-chain
 - help: |
     Exploit a credential stuffing vulnerability on a Cognito developer portal,
-    enumerate AWS permissions via Pacu, hijack a CodeBuild pipeline using
+    enumerate AWS permissions via iam:SimulatePrincipalPolicy, hijack a CodeBuild pipeline using
     buildspecOverride, inject a malicious Docker image into ECR, and steal
     secrets from Secrets Manager via ECS Task Role.
-- last-updated: 05-07-2026
+- last-updated: 05-09-2026

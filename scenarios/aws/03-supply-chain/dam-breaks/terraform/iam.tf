@@ -67,7 +67,7 @@ data "aws_iam_policy_document" "collaborator_policy_doc" {
   }
 
   statement {
-    sid    = "PacuIAMEnum"
+    sid    = "IAMEnumeration"
     effect = "Allow"
     actions = [
       "iam:SimulatePrincipalPolicy",

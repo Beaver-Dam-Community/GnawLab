@@ -108,7 +108,7 @@ whitelist_cidr = "YOUR.PUBLIC.IP/32"
 profile = "my-admin-profile"
 
 # Optional: Custom flag value
-flag_value = "FLAG{custom_flag_here}"
+flag_value = "flag{your-custom-flag-here}"
 ```
 
 ## Troubleshooting

@@ -50,5 +50,5 @@ variable "flag_value" {
   description = "Flag stored in Secrets Manager — beaverpay/prod/flag"
   type        = string
   sensitive   = true
-  default     = "FLAG{th3_c0mm1t_w4s_cl34n_but_y0u_w3r3_n0t}"
+  default     = "flag{commit-clean-you-were-not}"
 }
