@@ -8,7 +8,7 @@
 
 **Beaver Defense Inc.** operates an automated IAM policy detection system. Whenever any IAM user creates or attaches a customer-managed policy, an EventBridge rule invokes a Lambda function that scans the policy document and **deletes** it if it contains dangerous patterns.
 
-You have obtained the credentials of an IAM user with `iam:CreatePolicy` and `iam:AttachUserPolicy` (self) permissions. The user cannot directly access the company's flag bucket.
+You have obtained the credentials of an IAM user with `iam:CreatePolicy` and `iam:AttachUserPolicy` self permissions. The user cannot directly access the company's flag bucket.
 
 The detection Lambda matches blocked patterns as **literal strings** (case-insensitive). However, AWS IAM evaluates `?` and `*` characters inside the **action name portion** of an Action value as wildcards (the service vendor portion before the colon must be a literal name like `s3`). By writing actions such as `s3:Get?bject`, the attacker can grant themselves `s3:GetObject` semantically while the detector sees a string that does not match any blocked literal.
 
@@ -61,12 +61,12 @@ flowchart TB
     A[Leaked Access Key] --> B[sts:GetCallerIdentity]
     B --> C[iam:ListUserPolicies]
     C --> D[iam:GetUserPolicy]
-    D --> E[iam:CreatePolicy literal s3:ListAllMyBuckets]
-    E -->|Lambda deletes literal| F[iam:CreatePolicy s3:List?llMyBuckets]
+    D --> E["iam:CreatePolicy<br/>literal s3:ListAllMyBuckets"]
+    E -->|Lambda deletes literal| F["iam:CreatePolicy<br/>s3:List?llMyBuckets"]
     F --> G[iam:AttachUserPolicy]
     G --> H[s3:ListAllMyBuckets - discover flag bucket]
-    H --> I[iam:CreatePolicy literal s3:GetObject]
-    I -->|Lambda deletes literal| J[iam:CreatePolicy s3:Get?bject]
+    H --> I["iam:CreatePolicy<br/>literal s3:GetObject"]
+    I -->|Lambda deletes literal| J["iam:CreatePolicy<br/>s3:Get?bject"]
     J --> K[iam:AttachUserPolicy]
     K --> L[s3:GetObject]
     L --> M[FLAG]

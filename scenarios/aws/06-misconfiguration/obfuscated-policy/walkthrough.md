@@ -115,11 +115,11 @@ Pattern derivation:
 
 ```
 s3:List?llMyBuckets
-^^                  s3 literal vendor
-   ^^^^^            :List literal
-        ^           ?  -> A
-         ^^^^^^^^^^ llMyBuckets literal
-                  = s3:ListAllMyBuckets
+^^                   s3 literal vendor
+  ^^^^^              :List literal
+       ^             ?  -> A
+        ^^^^^^^^^^^  llMyBuckets literal
+                   = s3:ListAllMyBuckets
 ```
 
 ```bash
@@ -214,9 +214,9 @@ Use the wildcard-obfuscated equivalent (vendor stays literal `s3:`, action name 
 ```
 s3:Get?bject
 ^^             s3 literal vendor
-   ^^^^        :Get literal
-       ^       ?  -> O
-        ^^^^^  bject literal
+  ^^^^         :Get literal
+      ^        ?  -> O
+       ^^^^^   bject literal
               = s3:GetObject
 ```
 
@@ -276,27 +276,22 @@ FLAG{iam_wildcard_obfuscation_bypass_complete}
 ## Attack Chain Summary
 
 ```
-1. Identity Confirmation (sts:GetCallerIdentity)
-   |
+1. Leaked Access Key
+   ↓ sts:GetCallerIdentity — confirm IAM user identity
 2. Permission Enumeration
-   - iam:ListUserPolicies / iam:GetUserPolicy
-   - iam:ListAttachedUserPolicies
-   - iam:ListGroupsForUser
-   |
-3. Detection Reconnaissance - ListAllMyBuckets
-   - Create literal s3:ListAllMyBuckets policy -> deleted by Lambda
-   |
-4. Wildcard Obfuscation - Bucket Enumeration
-   - Action: s3:List?llMyBuckets  (IAM = s3:ListAllMyBuckets)
-   - Survives detector, attach to self, list buckets
-   |
-5. Detection Reconnaissance - GetObject
-   - Create literal s3:GetObject policy -> deleted by Lambda
-   |
-6. Wildcard Obfuscation - Object Read
-   - Action: s3:Get?bject  (IAM = s3:GetObject)
-   - Survives detector, attach to self
-   |
+   ↓ iam:ListUserPolicies / iam:GetUserPolicy / iam:ListAttachedUserPolicies / iam:ListGroupsForUser
+3. Detection Reconnaissance — ListAllMyBuckets
+   ↓ Create literal s3:ListAllMyBuckets policy — deleted by Lambda
+4. Wildcard Obfuscation — Bucket Enumeration
+   ↓ Create policy with Action: s3:List?llMyBuckets (IAM resolves to s3:ListAllMyBuckets)
+   ↓ Survives detector, iam:AttachUserPolicy to self
+   ↓ s3:ListAllMyBuckets — discover flag bucket name
+5. Detection Reconnaissance — GetObject
+   ↓ Create literal s3:GetObject policy — deleted by Lambda
+6. Wildcard Obfuscation — Object Read
+   ↓ Create policy with Action: s3:Get?bject (IAM resolves to s3:GetObject)
+   ↓ Survives detector, iam:AttachUserPolicy to self
+   ↓ s3:GetObject on flag.txt
 7. FLAG{iam_wildcard_obfuscation_bypass_complete}
 ```
 
