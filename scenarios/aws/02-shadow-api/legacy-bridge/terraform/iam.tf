@@ -60,6 +60,7 @@ data "aws_iam_policy_document" "shadow_api_role_s3_policy_doc" {
     actions   = [
       "iam:ListRolePolicies",
       "iam:GetRolePolicy",
+      "iam:ListAttachedRolePolicies",
     ]
     resources = [aws_iam_role.shadow_api_role_iam.arn]
   }
