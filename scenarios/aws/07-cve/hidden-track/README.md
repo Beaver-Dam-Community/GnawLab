@@ -71,18 +71,18 @@ Recover the deleted file from the vault bucket.
 
 ```mermaid
 flowchart TB
-    A["GET /news — tracklist 'permanently removed'<br/>Delete Marker hypothesis"] --> B["Register free account<br/>Login"]
-    B --> C["Upload probe file<br/>X-Processor: ExifTool/12.23<br/>CVE-2021-22204 identified"]
-    C --> D["generate_payload.py<br/>malicious.mp4 — DjVu ANTa + .mp4 extension"]
+    A[GET /news<br/>tracklist permanently removed] --> B[Register free account<br/>Login]
+    B --> C[Upload probe file<br/>X-Processor: ExifTool/12.23<br/>CVE-2021-22204 identified]
+    C --> D[generate_payload.py<br/>malicious.mp4 - DjVu ANTa]
     D --> E[Upload malicious.mp4]
-    E --> F["GuardDuty Malware Protection<br/>Async scan — not a blocking gate<br/>NO_THREATS_FOUND"]
-    E --> G["S3 PutObject → Lambda triggered<br/>ExifTool parses DjVu → ParseAnt eval → RCE"]
-    G --> H["Lambda env vars in portal response<br/>AWS credentials + VAULT_BUCKET"]
-    H --> I["sts:GetCallerIdentity<br/>beaversound-lambda-exec role confirmed"]
-    I --> J["s3:ListBucket on vault<br/>Target file not visible in current listing"]
-    J --> K["Object tags → CONFIDENTIAL<br/>Cross-ref /news → Delete Marker confirmed"]
-    K --> L["get-bucket-versioning → Enabled<br/>list-object-versions → Delete Marker found<br/>Previous version intact"]
-    L --> M["get-object --version-id<br/>File recovered"]
+    E --> F[GuardDuty Malware Protection<br/>Async scan - not a blocking gate<br/>NO_THREATS_FOUND]
+    E --> G[S3 PutObject - Lambda triggered<br/>ExifTool parses DjVu - RCE]
+    G --> H[Lambda env vars in response<br/>AWS credentials + VAULT_BUCKET]
+    H --> I[sts:GetCallerIdentity<br/>beaversound-lambda-exec confirmed]
+    I --> J[s3:ListBucket on vault<br/>Target file not visible]
+    J --> K[Object tags - CONFIDENTIAL<br/>Delete Marker confirmed]
+    K --> L[get-bucket-versioning - Enabled<br/>list-object-versions - version found]
+    L --> M[get-object --version-id<br/>File recovered]
     M --> N[FLAG]
 
     style F fill:#4c6ef5,color:#fff
