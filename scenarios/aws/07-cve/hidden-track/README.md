@@ -71,24 +71,33 @@ Recover the deleted file from the vault bucket.
 
 ```mermaid
 flowchart TB
-    A["GET /news<br/>tracklist permanently removed"] --> B["Register free account<br/>Login"]
-    B --> C["Upload probe file<br/>X-Processor: ExifTool/12.23<br/>CVE-2021-22204 identified"]
-    C --> D["generate_payload.py<br/>malicious.mp4 - DjVu ANTa"]
+    A["GET /news<br/>tracklist removed"] --> B["Register account<br/>Login"]
+    B --> C["Upload probe file<br/>ExifTool/12.23<br/>CVE-2021-22204"]
+    C --> D["generate_payload.py<br/>DjVu ANTa payload"]
     D --> E["Upload malicious.mp4"]
-    E --> F["GuardDuty Malware Protection<br/>Async scan - not a blocking gate<br/>NO_THREATS_FOUND"]
-    E --> G["S3 PutObject - Lambda triggered<br/>ExifTool parses DjVu - RCE"]
-    G --> H["Lambda env vars in response<br/>AWS credentials + VAULT_BUCKET"]
-    H --> I["sts:GetCallerIdentity<br/>beaversound-lambda-exec confirmed"]
-    I --> J["s3:ListBucket on vault<br/>Target file not visible"]
-    J --> K["Object tags - CONFIDENTIAL<br/>Delete Marker confirmed"]
-    K --> L["get-bucket-versioning Enabled<br/>list-object-versions - version found"]
-    L --> M["get-object with version-id<br/>File recovered"]
+    E --> F["GuardDuty scan<br/>NO_THREATS_FOUND"]
+    E --> G["Lambda triggered<br/>ExifTool RCE"]
+    G --> H["AWS credentials leaked<br/>VAULT_BUCKET exposed"]
+    H --> I["sts:GetCallerIdentity<br/>lambda-exec confirmed"]
+    I --> J["s3:ListBucket vault<br/>Target not visible"]
+    J --> K["CONFIDENTIAL tag<br/>Delete Marker confirmed"]
+    K --> L["Versioning Enabled<br/>Previous version found"]
+    L --> M["GetObject versionId<br/>File recovered"]
     M --> N["FLAG"]
 
+    style A fill:#4c6ef5,color:#fff
+    style B fill:#4c6ef5,color:#fff
+    style C fill:#4c6ef5,color:#fff
+    style D fill:#4c6ef5,color:#fff
+    style E fill:#4c6ef5,color:#fff
     style F fill:#4c6ef5,color:#fff
     style G fill:#4c6ef5,color:#fff
+    style H fill:#4c6ef5,color:#fff
     style I fill:#4c6ef5,color:#fff
+    style J fill:#4c6ef5,color:#fff
+    style K fill:#4c6ef5,color:#fff
     style L fill:#4c6ef5,color:#fff
+    style M fill:#4c6ef5,color:#fff
     style N fill:#4c6ef5,color:#fff
 ```
 
