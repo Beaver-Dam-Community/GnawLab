@@ -1,4 +1,4 @@
-# legacy-bridge
+# Legacy Bridge
 
 **Difficulty:** Easy  
 **Estimated Time:** 30 min  
@@ -6,21 +6,27 @@
 
 ## Overview
 
-Beaver Finance, a US credit card issuer, consolidated multiple systems through rapid acquisitions and merged them into a centralized cloud environment. A modern v5 customer portal serves as the public entry point, but to maintain compatibility with legacy services, undocumented v1 systems (IVR, older mobile app, batch jobs) continue operating on the internal network.
+Beaver Finance, a US credit card issuer, consolidated multiple systems through rapid acquisitions and merged them into a centralized cloud environment.
 
-The security team believed these legacy systems were isolated, but a misconfiguration in the v5 portal's URL forwarding exposed an internal "Shadow API" connection, allowing attackers from the public internet to reach the v1 backend.
+**v5 Portal** is the modernized public-facing customer portal. It runs on a public EC2 instance with IMDSv2 enforced, handles document lookups, and forwards certain requests to the internal v1 backend for legacy compatibility.
+
+**v1 Shadow API** is an undocumented legacy backend originally built for IVR systems, older mobile apps, and batch jobs. It was never decommissioned — it runs on a private EC2 instance with no authentication, IMDSv1 enabled, and is only supposed to be reachable from within the internal network.
+
+The security team believed the v1 backend was isolated behind the private subnet. However, a misconfiguration in the v5 portal's URL forwarding parameter exposed a direct path to the v1 backend, allowing attackers from the public internet to reach it via SSRF.
 
 ### References
 
-- [Capital One 2019 Breach](https://www.capitalone.com/digital/facts2019/) - Large-scale PII theft via SSRF-based IMDSv1 metadata access and over-privileged IAM roles
-- [AWS EC2 Metadata Service (IMDSv1)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html)
-- [OWASP API Security Top 10 - IDOR](https://owasp.org/www-project-api-security/API3-2023-Broken-Object-Level-Authorization.html)
-- [OWASP API Security Top 10 - SSRF](https://owasp.org/www-project-api-security/API7-2023-Server-Side-Request-Forgery-SSRF.html)
+- **Capital One 2019 Breach** - Large-scale PII theft via SSRF-based IMDSv1 metadata access and over-privileged IAM roles
+  - [Capital One: Facts 2019](https://www.capitalone.com/digital/facts2019/)
+- **AWS EC2 Metadata Service (IMDSv1)** - Official documentation for retrieving instance metadata including IAM role credentials
+  - [AWS Docs: Instance Metadata Retrieval](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html)
+- **OWASP API Security Top 10 - SSRF** - Server-side request forgery vulnerability allowing attackers to induce the server to make requests to unintended locations
+  - [OWASP: API7:2023 SSRF](https://owasp.org/www-project-api-security/API7-2023-Server-Side-Request-Forgery-SSRF.html)
 
 ## Learning Objectives
 
 - Understand security risks created by integrating legacy systems
-- Identify access control flaws (IDOR) in API design
+- Identify unauthenticated API endpoints that expose internal service information
 - Access internal services through SSRF vulnerabilities
 - Steal AWS credentials from the IMDSv1 metadata service
 - Use stolen credentials to access data in S3
@@ -45,6 +51,10 @@ http://<gateway-ip>
 
 Download the flag file from S3.
 
+## Infrastructure Architecture
+
+![Legacy Bridge Architecture](./assets/image/legacy-bridge-architecture.png)
+
 ## Setup & Cleanup
 
 - [setup.md](./setup.md) - Deploy scenario infrastructure with Terraform
@@ -56,17 +66,17 @@ Download the flag file from S3.
 
 ```mermaid
 flowchart TB
-    A[Beaver Finance Portal v5] --> B[IDOR via file_id]
-    B --> C[internal_source Hostname Leaked]
-    C --> D[SSRF via source Parameter]
-    D --> E[IMDSv1 169.254.169.254]
-    E --> F[IAM Role Name Extracted]
-    F --> G[Temporary Credentials Stolen]
-    G --> H[sts:GetCallerIdentity]
-    H --> I[iam:ListRolePolicies]
-    I --> J[iam:GetRolePolicy]
-    J --> K[s3:ListBucket + s3:GetObject]
-    K --> L[FLAG]
+    A["Beaver Finance Portal v5"] --> B["Unauthenticated file_id enum"]
+    B --> C["internal_source hostname leaked"]
+    C --> D["SSRF via source parameter"]
+    D --> E["IMDSv1 169.254.169.254"]
+    E --> F["IAM role name extracted"]
+    F --> G["Temporary credentials stolen"]
+    G --> H["sts:GetCallerIdentity"]
+    H --> I["iam:ListRolePolicies"]
+    I --> J["iam:GetRolePolicy"]
+    J --> K["s3:ListBucket + s3:GetObject"]
+    K --> L["FLAG"]
 ```
 
 See [walkthrough.md](./walkthrough.md) for detailed exploitation steps.
