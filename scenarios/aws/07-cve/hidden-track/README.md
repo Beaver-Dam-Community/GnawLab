@@ -71,25 +71,25 @@ Recover the deleted file from the vault bucket.
 
 ```mermaid
 flowchart TB
-    A[GET /news — tracklist 'permanently removed'\nDelete Marker hypothesis] --> B[Register free account\nLogin]
-    B --> C[Upload probe file\nX-Processor: ExifTool/12.23\nCVE-2021-22204 identified]
-    C --> D[generate_payload.py\nmalicious.mp4 — DjVu ANTa + .mp4 extension]
+    A["GET /news — tracklist 'permanently removed'<br/>Delete Marker hypothesis"] --> B["Register free account<br/>Login"]
+    B --> C["Upload probe file<br/>X-Processor: ExifTool/12.23<br/>CVE-2021-22204 identified"]
+    C --> D["generate_payload.py<br/>malicious.mp4 — DjVu ANTa + .mp4 extension"]
     D --> E[Upload malicious.mp4]
-    E --> F[GuardDuty Malware Protection\nAsync scan — not a blocking gate\nNO_THREATS_FOUND]
-    E --> G[S3 PutObject → Lambda triggered\nExifTool parses DjVu → ParseAnt eval → RCE]
-    G --> H[Lambda env vars in portal response\nAWS credentials + VAULT_BUCKET]
-    H --> I[sts:GetCallerIdentity\nbeaversound-lambda-exec role confirmed]
-    I --> J[s3:ListBucket on vault\nTarget file not visible in current listing]
-    J --> K[Object tags → CONFIDENTIAL\nCross-ref /news → Delete Marker confirmed]
-    K --> L[get-bucket-versioning → Enabled\nlist-object-versions → Delete Marker found\nPrevious version intact]
-    L --> M[get-object --version-id\nFile recovered]
+    E --> F["GuardDuty Malware Protection<br/>Async scan — not a blocking gate<br/>NO_THREATS_FOUND"]
+    E --> G["S3 PutObject → Lambda triggered<br/>ExifTool parses DjVu → ParseAnt eval → RCE"]
+    G --> H["Lambda env vars in portal response<br/>AWS credentials + VAULT_BUCKET"]
+    H --> I["sts:GetCallerIdentity<br/>beaversound-lambda-exec role confirmed"]
+    I --> J["s3:ListBucket on vault<br/>Target file not visible in current listing"]
+    J --> K["Object tags → CONFIDENTIAL<br/>Cross-ref /news → Delete Marker confirmed"]
+    K --> L["get-bucket-versioning → Enabled<br/>list-object-versions → Delete Marker found<br/>Previous version intact"]
+    L --> M["get-object --version-id<br/>File recovered"]
     M --> N[FLAG]
 
-    style F fill:#f4a261,color:#000
-    style G fill:#e63946,color:#fff
-    style I fill:#7950f2,color:#fff
-    style L fill:#e67700,color:#fff
-    style N fill:#51cf66,color:#fff
+    style F fill:#4c6ef5,color:#fff
+    style G fill:#4c6ef5,color:#fff
+    style I fill:#4c6ef5,color:#fff
+    style L fill:#4c6ef5,color:#fff
+    style N fill:#4c6ef5,color:#fff
 ```
 
 See [walkthrough.md](./walkthrough.md) for detailed exploitation steps.
