@@ -1,8 +1,8 @@
 # Dam Breaks
 
 **Difficulty:** Medium  
-**Estimated Time:** 60 min  
-**Category:** supply-chain
+**Estimated Time:** 30 min  
+**Type:** multi-hop-combo
 
 ## Overview
 

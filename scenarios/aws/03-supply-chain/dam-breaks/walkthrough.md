@@ -393,14 +393,14 @@ aws iam list-role-policies --role-name "$CODEBUILD_ROLE_NAME" --region us-east-1
 Output:
 ```json
 {
-  "policyNames": ["dam-breaks-codebuild-prod-policy-xxxxxxxx"]
+  "policyNames": ["dam-breaks-codebuild-policy-xxxxxxxx"]
 }
 ```
 
 ```bash
 aws iam get-role-policy \
   --role-name "$CODEBUILD_ROLE_NAME" \
-  --policy-name "dam-breaks-codebuild-prod-policy-xxxxxxxx" \
+  --policy-name "dam-breaks-codebuild-policy-xxxxxxxx" \
   --query 'PolicyDocument.Statement' \
   --region us-east-1
 ```
@@ -424,18 +424,30 @@ Output:
     "Resource": "*"
   },
   {
-    "Sid": "ECSAccess",
+    "Sid": "ECSUpdateService",
     "Effect": "Allow",
-    "Action": [
-      "ecs:UpdateService",
-      "ecs:DescribeServices"
-    ],
-    "Resource": "*"
+    "Action": "ecs:UpdateService",
+    "Resource": "arn:aws:ecs:us-east-1:123456789012:service/dam-breaks-prod-cluster-xxxxxxxx/dam-breaks-webapp-service-xxxxxxxx"
   }
 ]
 ```
 
-`ecr:PutImage` confirmed. `ecs:UpdateService` also present — the `post_build` force-deploy call succeeds without touching the Collaborator role's permissions at all.
+`ecr:PutImage` confirmed. `ecs:UpdateService` also present and scoped to the prod service — the `post_build` force-deploy call succeeds without touching the Collaborator role's permissions at all.
+
+Also confirm no managed policies are attached — a managed policy could grant permissions not visible in the inline policy:
+
+```bash
+aws iam list-attached-role-policies --role-name "$CODEBUILD_ROLE_NAME" --region us-east-1
+```
+
+Output:
+```json
+{
+  "AttachedPolicies": []
+}
+```
+
+No managed policies attached. All permissions are in the inline policy above.
 
 One more check before moving on: does the CodeBuild service role have `secretsmanager:GetSecretValue` directly? If yes, the flag can be read straight from the buildspec — no ECS needed.
 
@@ -501,7 +513,7 @@ Output:
 ```json
 {
   "digest": "sha256:aabb1234...",
-  "pushedAt": "2026-04-01T10:00:00+00:00"
+  "pushedAt": "2026-05-10T10:00:00+00:00"
 }
 ```
 
@@ -636,22 +648,30 @@ Output:
       "Sid": "SecretsManagerAccess",
       "Effect": "Allow",
       "Action": "secretsmanager:GetSecretValue",
-      "Resource": "arn:aws:secretsmanager:us-east-1:123456789012:secret:beaverpay/prod/flag-*"
-    },
-    {
-      "Sid": "CloudWatchLogs",
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": "*"
+      "Resource": [
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:beaverpay/prod/db-master-credentials-*",
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:beaverpay/prod/payment-gateway-api-key-*",
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:beaverpay/prod/flag-*"
+      ]
     }
   ]
 }
 ```
 
-`secretsmanager:GetSecretValue` is granted on the flag secret ARN. The container will inherit these credentials automatically via `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` — no configuration needed inside the container.
+Also confirm no managed policies are attached:
+
+```bash
+aws iam list-attached-role-policies --role-name "$TASK_ROLE_NAME" --region us-east-1
+```
+
+Output:
+```json
+{
+  "AttachedPolicies": []
+}
+```
+
+No managed policies attached. `secretsmanager:GetSecretValue` is granted on the flag secret ARN. The container will inherit these credentials automatically via `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` — no configuration needed inside the container.
 
 Before committing to the full attack, scan the existing CloudWatch logs from the legitimate running container. If the app already prints the secret to stdout, the ECR injection is unnecessary.
 
@@ -674,7 +694,7 @@ Key findings:
 - Rolling deployment (`ECS`) — no manual approval gate, new image deploys automatically
 - Circuit breaker disabled — a failed container will not auto-rollback or trigger alerts
 - `:latest` tag referenced — overwriting ECR `:latest` triggers deployment immediately
-- Task Role has `secretsmanager:GetSecretValue` on the flag ARN — verified
+- Task Role has `secretsmanager:GetSecretValue` on all 3 production secrets (db credentials, payment key, flag) — over-provisioned, but flag read is confirmed
 - Existing logs contain no secrets — ECR injection is the only path
 
 All prerequisites confirmed. The attack chain is viable end-to-end.
