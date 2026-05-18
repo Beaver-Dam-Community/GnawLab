@@ -6,9 +6,13 @@
 
 ## Overview
 
-Beaver Finance, a US credit card issuer, consolidated multiple systems through rapid acquisitions and merged them into a centralized cloud environment. A modern v5 customer portal serves as the public entry point, but to maintain compatibility with legacy services, undocumented v1 systems (IVR, older mobile app, batch jobs) continue operating on the internal network.
+Beaver Finance, a US credit card issuer, consolidated multiple systems through rapid acquisitions and merged them into a centralized cloud environment.
 
-The security team believed these legacy systems were isolated, but a misconfiguration in the v5 portal's URL forwarding exposed an internal "Shadow API" connection, allowing attackers from the public internet to reach the v1 backend.
+**v5 Portal** is the modernized public-facing customer portal. It runs on a public EC2 instance with IMDSv2 enforced, handles document lookups, and forwards certain requests to the internal v1 backend for legacy compatibility.
+
+**v1 Shadow API** is an undocumented legacy backend originally built for IVR systems, older mobile apps, and batch jobs. It was never decommissioned — it runs on a private EC2 instance with no authentication, IMDSv1 enabled, and is only supposed to be reachable from within the internal network.
+
+The security team believed the v1 backend was isolated behind the private subnet. However, a misconfiguration in the v5 portal's URL forwarding parameter exposed a direct path to the v1 backend, allowing attackers from the public internet to reach it via SSRF.
 
 ### References
 
