@@ -66,16 +66,16 @@ Download the flag file from S3.
 
 ```mermaid
 flowchart TB
-    A["Beaver Finance Portal v5"] --> B["Unauthenticated file_id enum"]
-    B --> C["internal_source hostname leaked"]
-    C --> D["SSRF via source parameter"]
-    D --> E["IMDSv1 169.254.169.254"]
-    E --> F["IAM role name extracted"]
-    F --> G["Temporary credentials stolen"]
+    A["Beaver Finance<br/>Portal v5"] --> B["file_id<br/>enumeration"]
+    B --> C["Backend hostname<br/>leaked"]
+    C --> D["SSRF via<br/>source param"]
+    D --> E["IMDSv1<br/>169.254.169.254"]
+    E --> F["IAM role name<br/>extracted"]
+    F --> G["Temporary creds<br/>stolen"]
     G --> H["sts:GetCallerIdentity"]
     H --> I["iam:ListRolePolicies"]
     I --> J["iam:GetRolePolicy"]
-    J --> K["s3:ListBucket + s3:GetObject"]
+    J --> K["s3:ListBucket<br/>s3:GetObject"]
     K --> L["FLAG"]
 ```
 
