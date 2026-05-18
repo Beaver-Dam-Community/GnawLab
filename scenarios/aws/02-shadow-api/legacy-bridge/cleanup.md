@@ -1,4 +1,4 @@
-# legacy-bridge - Cleanup Guide
+# Legacy Bridge - Cleanup Guide
 
 ## Automated Cleanup (Recommended)
 

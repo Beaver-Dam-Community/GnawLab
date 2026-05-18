@@ -1,4 +1,4 @@
-# legacy-bridge - Setup Guide
+# Legacy Bridge - Setup Guide
 
 ## Prerequisites
 
@@ -111,7 +111,7 @@ Expected response:
 
 ## Step 9: Start the Challenge!
 
-Explore the web application and find the vulnerabilities. Your goal is to extract PII data from the S3 bucket using IDOR and SSRF attacks to steal AWS credentials.
+Explore the web application and find the vulnerabilities. Your goal is to extract PII data from the S3 bucket by exploiting the SSRF vulnerability to steal AWS credentials.
 
 Now find the flag! See [walkthrough.md](./walkthrough.md) if you need hints.
 
