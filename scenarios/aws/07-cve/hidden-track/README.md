@@ -85,20 +85,6 @@ flowchart TB
     L --> M["GetObject versionId<br/>File recovered"]
     M --> N["FLAG"]
 
-    style A fill:#4c6ef5,color:#fff
-    style B fill:#4c6ef5,color:#fff
-    style C fill:#4c6ef5,color:#fff
-    style D fill:#4c6ef5,color:#fff
-    style E fill:#4c6ef5,color:#fff
-    style F fill:#4c6ef5,color:#fff
-    style G fill:#4c6ef5,color:#fff
-    style H fill:#4c6ef5,color:#fff
-    style I fill:#4c6ef5,color:#fff
-    style J fill:#4c6ef5,color:#fff
-    style K fill:#4c6ef5,color:#fff
-    style L fill:#4c6ef5,color:#fff
-    style M fill:#4c6ef5,color:#fff
-    style N fill:#4c6ef5,color:#fff
 ```
 
 See [walkthrough.md](./walkthrough.md) for detailed exploitation steps.
