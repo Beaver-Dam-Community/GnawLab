@@ -1,15 +1,3 @@
-"""
-process-upload Lambda handler
-
-Downloads the uploaded file from S3, runs ExifTool 12.23 on it,
-and returns the metadata output. If CVE-2021-22204 is triggered,
-the RCE payload writes to /tmp/exif_rce.txt, which is included in
-the response as 'debug_output'.
-
-ExifTool is invoked via Perl if available. If Perl is absent from the
-Lambda runtime, a Python-based DjVu parser reproduces the vulnerable
-ParseAnt() eval() behaviour so the CTF chain works in any runtime.
-"""
 import json
 import os
 import re
@@ -25,10 +13,8 @@ RCE_FILE     = '/tmp/exif_rce.txt'
 VAULT_BUCKET = os.environ.get('VAULT_BUCKET', '')
 
 
-# ── ExifTool via Perl ─────────────────────────────────────────────────────────
-
 def _run_real_exiftool(local_path, env):
-    perl_bin    = shutil.which('perl') or '/usr/bin/perl'
+    perl_bin     = shutil.which('perl') or '/usr/bin/perl'
     exiftool_bin = '/opt/bin/exiftool'
     try:
         r = subprocess.run(
@@ -37,16 +23,13 @@ def _run_real_exiftool(local_path, env):
         )
         return r.stdout or r.stderr or '(no output)'
     except (FileNotFoundError, PermissionError, subprocess.TimeoutExpired):
-        return None          # fall through to Python simulation
+        return None
 
-
-# ── Python CVE-2021-22204 simulation ─────────────────────────────────────────
 
 def _parse_djvu_anta(data):
-    """Return list of ANTa chunk payloads from a DjVu IFF file."""
     if not data.startswith(b'AT&TFORM'):
         return []
-    offset  = 16          # past AT&TFORM(8) + size(4) + type(4)
+    offset  = 16
     results = []
     while offset + 8 <= len(data):
         chunk_id   = data[offset:offset + 4]
@@ -59,15 +42,6 @@ def _parse_djvu_anta(data):
 
 
 def _python_exiftool(local_path):
-    """
-    Simulate ExifTool 12.23 ParseAnt() eval() vulnerability (CVE-2021-22204).
-
-    Real ExifTool: ParseAnt() calls eval() on annotation values, allowing
-    arbitrary Perl (and thus shell) execution via \\c${system(q(CMD))}.
-
-    Here we replicate the vulnerable evaluation path in Python so the CTF
-    exploit chain works without requiring Perl in the Lambda runtime.
-    """
     try:
         with open(local_path, 'rb') as fh:
             data = fh.read()
@@ -85,8 +59,6 @@ def _python_exiftool(local_path):
         )
 
     for annotation in _parse_djvu_anta(data):
-        # CVE-2021-22204 payload pattern produced by generate_payload.py:
-        #   (metadata "\c${system(q(CMD))};")
         m = re.search(r'system\(q\((.+?)\)\)', annotation)
         if m:
             cmd = m.group(1)
@@ -108,8 +80,6 @@ def _python_exiftool(local_path):
         f'Gamma                           : 2.2\n'
     )
 
-
-# ── Lambda handler ────────────────────────────────────────────────────────────
 
 def lambda_handler(event, context):
     bucket = event.get('bucket')
@@ -137,7 +107,6 @@ def lambda_handler(event, context):
             perl5lib += ':' + env['PERL5LIB']
         env['PERL5LIB'] = perl5lib
 
-        # Try real ExifTool first; fall back to Python simulation.
         exiftool_output = _run_real_exiftool(local_path, env)
         if exiftool_output is None:
             exiftool_output = _python_exiftool(local_path)
