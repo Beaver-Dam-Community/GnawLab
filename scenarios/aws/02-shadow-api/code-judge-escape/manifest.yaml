@@ -1,0 +1,85 @@
+name: code-judge-escape
+category: aws
+difficulty: Hard
+size: Medium
+version: "1.0"
+
+tags:
+  - shadow-api
+  - pickle-deserialization
+  - docker-socket
+  - container-escape
+  - imdsv2
+  - ecs-fargate
+  - ecs-exec
+  - iam-privilege-escalation
+  - lateral-movement
+
+start_identity: Anonymous external attacker (target IP only).
+credentials_provided:
+  - assets/target_info.txt
+
+goal: Retrieve the flag from /app/data/flag.txt inside the private Fargate flag-vault container.
+
+resources:
+  application:
+    - type: Web Application
+      name: VulnBoard (Flask 3 + gunicorn)
+      note: Coding evaluation platform; pickles GradeResult into the result_cache cookie (SECURITY-142)
+    - type: Container Runtime
+      name: Docker engine on EC2 host
+      note: VulnBoard container mounts /var/run/docker.sock
+    - type: Config File
+      name: docker-compose.yml
+      note: Bind-mounted read-only at /srv/docker-compose.yml inside the VulnBoard container as an in-product hint
+  network:
+    - type: VPC
+      subnets:
+        - Public (us-east-1a)
+        - Private (us-east-1a)
+        - Private (us-east-1b)
+    - type: NAT Gateway
+      note: Egress for Fargate (ECR pull, SSM channels for ECS Exec)
+  compute:
+    - type: EC2
+      name: VulnBoard host
+      subnet: Public
+      instance_type: t3.small
+      ami: Amazon Linux 2023
+      notes:
+        - IMDSv2 required
+        - http_put_response_hop_limit = 1
+        - docker.sock mounted into VulnBoard container
+    - type: ECS Fargate Task
+      name: flag-vault
+      subnet: Private
+      launch_type: FARGATE
+      platform_version: LATEST
+      notes:
+        - enable_execute_command = true
+        - flag written to /app/data/flag.txt and chmod 0444
+  iam:
+    - type: IAM Role
+      name: gnawlab-codejudge-app-role-{id}
+      note: Overprivileged; legacy ecs:ExecuteCommand + ssmmessages:* not trimmed after platform-automation retirement
+    - type: IAM Role
+      name: gnawlab-codejudge-task-role-{id}
+      note: Minimal; only ssmmessages:* for ECS Exec channels
+    - type: IAM Instance Profile
+      name: gnawlab-codejudge-app-profile-{id}
+
+real_world_references:
+  - title: "CVE-2024-28185 / CVE-2024-28189 / CVE-2024-29021 - Judge0 Sandbox Escape Series"
+    url: "https://tantosec.com/blog/judge0/"
+  - title: "CVE-2021-33026 - Flask-Caching Pickle Deserialization RCE"
+    url: "https://github.com/advisories/GHSA-656c-6cxf-hvcv"
+  - title: "Understanding Docker Container Escapes (docker.sock = root)"
+    url: "https://blog.trailofbits.com/2019/07/19/understanding-docker-container-escapes/"
+  - title: "Aqua AVD-KSV-0006 - No Docker Sock Mount"
+    url: "https://avd.aquasec.com/misconfig/kubernetes/general/avd-ksv-0006/"
+  - title: "Misconfiguration Spotlight: Securing EC2 IMDS (hop_limit in containers)"
+    url: "https://securitylabs.datadoghq.com/articles/misconfiguration-spotlight-imds/"
+  - title: "The Many Ways to Obtain Credentials in AWS (ECS task metadata)"
+    url: "https://www.wiz.io/blog/the-many-ways-to-obtain-credentials-in-aws"
+  - title: "ECScape - Cross-Task IAM Credential Theft in Amazon ECS (Black Hat USA 2025)"
+    url: "https://github.com/naorhaziz/ecscape"
