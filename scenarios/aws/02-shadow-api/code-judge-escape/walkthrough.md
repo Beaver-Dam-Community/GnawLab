@@ -1,10 +1,13 @@
 # Code Judge Escape - Walkthrough
 
-> The scenario depicts a fictional company. All AWS Account IDs, IPs, and credentials
-> shown in this document are placeholders (`123456789012`, `203.0.113.42`,
-> `AKIAIOSFODNN7EXAMPLE`, etc.). Substitute your own values.
+> **Security Note**: Use placeholders for all AWS Account IDs, Access Keys, and Secret Keys.
+> - Account ID: `123456789012`
+> - Access Key: `AKIAIOSFODNN7EXAMPLE` or `ASIAXXXXXXXXXXX`
+> - Secret Key: `xxxxxxxx` or mask actual values
 
-## Exploitation Route
+The scenario depicts a fictional company. All AWS Account IDs, IPs, and credentials shown in this document are placeholders (`123456789012`, `203.0.113.42`, `AKIAIOSFODNN7EXAMPLE`, etc.). Substitute your own values.
+
+## Attack Path
 
 ```mermaid
 flowchart TB
