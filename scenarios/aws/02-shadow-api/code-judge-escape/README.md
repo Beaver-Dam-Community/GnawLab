@@ -6,11 +6,11 @@
 
 ## Overview
 
-**Beaver Recruit Inc.** built **VulnBoard**, an internal Python coding-evaluation platform, to assess engineering candidates and run quarterly internal evaluations. The platform was originally locked behind a VPN; when the recruitment team expanded the program to external applicants, the platform team opened ingress to `0.0.0.0/0` "just for the recruiting window." The change was never rolled back, leaving an internal grading service permanently exposed on the public internet.
+**Beaver Recruit Inc.** built **VulnBoard**, an internal Python coding-evaluation platform used for engineering interviews and quarterly internal evaluations. It originally lived behind the corporate VPN. When the recruitment team expanded the program to external applicants, the platform team opened ingress to `0.0.0.0/0` "just for the recruiting window," and the change was never rolled back.
 
-VulnBoard grades each submission by spawning an ephemeral `python:3.11-slim` container per request. To do that, the app container needs to reach the host Docker daemon, so `/var/run/docker.sock` is bind-mounted into it — a HIGH-severity anti-pattern documented by Aqua AVD-KSV-0006 and the Trail of Bits container-escape post. An early developer also pickled the custom `GradeResult` class into a `result_cache` cookie to skip a JSON migration; the `SECURITY-142` ticket to move to signed JSON is still open. Both shortcuts shipped to production.
+VulnBoard grades each submission by spawning an ephemeral `python:3.11-slim` container per request. To make that work, the app container reaches the host Docker daemon through a bind-mounted `/var/run/docker.sock`. An early developer also pickled the custom `GradeResult` class into a `result_cache` cookie to skip a JSON migration; the `SECURITY-142` ticket to move to signed JSON is still open. Both shortcuts shipped to production.
 
-Starting from nothing but the public IP in `target_info.txt`, players must exploit pickle deserialization on the `result_cache` cookie to gain RCE inside the VulnBoard container, abuse the bind-mounted Docker socket to spawn a host-network container that reaches IMDSv2 with `hop_limit = 1`, steal the EC2 instance role's temporary credentials, enumerate ECS, and use the role's left-over `ecs:ExecuteCommand` permission to drop a shell inside the private Fargate `flag-vault` task that holds the flag.
+Starting from nothing but the public IP in `target_info.txt`, players exploit the pickled cookie to land RCE inside the VulnBoard container, pivot through the Docker socket to reach IMDSv2 and steal the EC2 role's credentials, then use the role's left-over `ecs:ExecuteCommand` permission to drop a shell into the private Fargate task that holds the flag.
 
 ### References
 
@@ -35,15 +35,15 @@ Starting from nothing but the public IP in `target_info.txt`, players must explo
   - [docs.aws.amazon.com/AmazonECS/.../ecs-exec.html](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html)
 - **Wiz Research: Tracking TeamPCP** (2026) — in-the-wild threat-actor abuse of ECS Exec (SSM Agent-backed) for post-compromise command execution inside running containers.
   - [wiz.io/blog/tracking-teampcp-investigating-post-compromise-attacks-seen-in-the-wild](https://www.wiz.io/blog/tracking-teampcp-investigating-post-compromise-attacks-seen-in-the-wild)
-- **ECScape** (Sweet Security / Naor Haziz, Black Hat USA 2025) — cross-task ECS credential theft on EC2 launch type. Explains why this lab uses Fargate (per-task microVM isolation) so the blast radius is bounded to the compromised task.
-  - [GitHub PoC: naorhaziz/ecscape](https://github.com/naorhaziz/ecscape)
+- **ECScape** (Naor Haziz, Sweet Security; Black Hat USA 2025) — cross-task ECS credential theft on the EC2 launch type. Explains why this lab uses Fargate (per-task microVM isolation) so the blast radius is bounded to the compromised task.
+  - [Black Hat USA 2025: ECS-cape – Hijacking IAM Privileges in Amazon ECS](https://www.youtube.com/watch?v=UV-hS-DTeik)
 
 ## Learning Objectives
 
 - Recognise Python `pickle` framing inside an HTTP cookie (the `\x80\x04` magic that follows base64 `gASV...`) and build a `__reduce__` gadget that triggers code execution the moment `pickle.loads` is called
 - Identify a bind-mounted `/var/run/docker.sock` from inside a workload container and use the host Docker daemon as a privilege primitive — without breaking the sandbox itself
 - Bypass IMDSv2 `hop_limit = 1` by spawning a `--network host` container through the Docker socket; understand why AWS-recommended hardening defaults are necessary but not by themselves sufficient
-- Enumerate an EC2 instance role's IAM policy, identify left-over `ecs:ExecuteCommand` / `ssmmessages:*` permissions, and use them to land an interactive shell inside a private Fargate task without ever needing the task role's own credentials
+- Enumerate an EC2 instance role's IAM policy, identify left-over `ecs:ExecuteCommand` and `ssmmessages:*` permissions, and use them to land an interactive shell inside a private Fargate task
 
 ## Scenario Resources
 
@@ -74,7 +74,7 @@ Read the contents of `/app/data/flag.txt` inside the private Fargate `flag-vault
 - [setup.md](./setup.md) - Deploy scenario infrastructure
 - [cleanup.md](./cleanup.md) - Remove all resources
 
-> **Warning:** This scenario creates real AWS resources that may incur costs. After `terraform apply` the VulnBoard host takes approximately 5–8 minutes to fully initialize — about 4–6 minutes for VPC / NAT Gateway / IAM / EC2 provisioning, then another 2–3 minutes while the EC2 user-data script installs Docker, builds the VulnBoard image, and starts the container. Poll `http://<target_ip>:8080/health` until it returns `OK` before starting the attack chain. Always `terraform destroy` when done — a leftover NAT Gateway alone costs ~$1/day.
+> **Warning:** This scenario creates real AWS resources that may incur costs. The VulnBoard host takes approximately 5–8 minutes to fully initialize after `terraform apply`: roughly 4–6 minutes for VPC, NAT Gateway, IAM, and EC2 provisioning, then another 2–3 minutes while the EC2 user-data script installs Docker, builds the VulnBoard image, and starts the container. Poll `http://<target_ip>:8080/health` until it returns `OK` before starting the attack chain, and always run `terraform destroy` when finished.
 
 ## Infrastructure Architecture
 
@@ -82,7 +82,7 @@ Read the contents of `/app/data/flag.txt` inside the private Fargate `flag-vault
 
 ## Real-world Reference
 
-> **Coding-evaluation sandbox escape via privileged Docker access:** A pattern where a self-hosted code-grading service spawns user code in containers, mounts the host Docker daemon into the app container so it can launch those sandboxes, and accidentally turns *any* RCE inside the app into host-equivalent privilege — including reach to the cloud instance metadata service. Judge0, the most widely-deployed open-source code-evaluation system, shipped three Critical CVEs in 2024 (CVE-2024-28185 / 28189 / 29021) under exactly this shape: an attacker-submitted program escaped the evaluation container via symlink primitives and a privileged Docker container, then read host credentials from IMDS. This lab reproduces the same end-to-end primitive — *user code execution + privileged Docker daemon reachable + IMDS reachable* — but switches the entry trigger to a Flask `pickle.loads` cookie (the canonical CVE-2021-33026 pattern), so the initial-access step is itself a recognisable industry anti-pattern rather than a Judge0-specific CVE replay.
+> **Coding-evaluation sandbox escape via privileged Docker access:** A pattern where a self-hosted code-grading service mounts the host Docker daemon into its application container so it can launch user-code sandboxes, accidentally turning any RCE inside the application into host-equivalent privilege and reach to the cloud instance metadata service. Judge0, the most widely-deployed open-source code-evaluation system, shipped three Critical CVEs in 2024 (CVE-2024-28185 / 28189 / 29021) under exactly this shape: an attacker-submitted program escaped the evaluation container via symlink primitives and a privileged Docker container, then read host credentials from IMDS. This lab reproduces the same end-to-end primitive of *user code execution + privileged Docker daemon + reachable IMDS*, but switches the entry trigger to a Flask `pickle.loads` cookie (the canonical CVE-2021-33026 pattern), so the initial-access step is itself a recognisable industry anti-pattern rather than a Judge0-specific CVE replay.
 
 ## Walkthrough
 
