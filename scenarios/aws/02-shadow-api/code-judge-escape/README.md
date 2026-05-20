@@ -74,7 +74,7 @@ Read the contents of `/app/data/flag.txt` inside the private Fargate `flag-vault
 - [setup.md](./setup.md) - Deploy scenario infrastructure
 - [cleanup.md](./cleanup.md) - Remove all resources
 
-> **Warning:** This scenario creates real AWS resources (EC2, NAT Gateway, Fargate, CloudWatch Logs) that incur cost while running — approximately $0.20-0.40 / hour. Always `terraform destroy` when done; a leftover NAT Gateway alone is ~$1/day.
+> **Warning:** This scenario creates real AWS resources that may incur costs. After `terraform apply` the VulnBoard host takes approximately 5–8 minutes to fully initialize — about 4–6 minutes for VPC / NAT Gateway / IAM / EC2 provisioning, then another 2–3 minutes while the EC2 user-data script installs Docker, builds the VulnBoard image, and starts the container. Poll `http://<target_ip>:8080/health` until it returns `OK` before starting the attack chain. Always `terraform destroy` when done — a leftover NAT Gateway alone costs ~$1/day.
 
 ## Infrastructure Architecture
 
