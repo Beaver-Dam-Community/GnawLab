@@ -61,12 +61,16 @@ resources:
   iam:
     - type: IAM Role
       name: gnawlab-codejudge-app-role-{id}
-      note: Overprivileged; legacy ecs:ExecuteCommand + ssmmessages:* not trimmed after platform-automation retirement
+      note: Overprivileged; legacy ecs:ExecuteCommand + ssmmessages:* not trimmed after platform-automation retirement. Intentionally lacks ssm:GetParameters so the flag SSM ARN visible in DescribeTaskDefinition is unreachable.
     - type: IAM Role
       name: gnawlab-codejudge-task-role-{id}
       note: Minimal; only ssmmessages:* for ECS Exec channels
     - type: IAM Instance Profile
       name: gnawlab-codejudge-app-profile-{id}
+  storage:
+    - type: SSM Parameter (SecureString)
+      name: /gnawlab/codejudge/{id}/flag
+      note: Holds the flag value. Decrypted at task launch by the ECS execution role and injected as $FLAG via task `secrets`. The compromised EC2 (app) role lacks ssm:GetParameters and cannot resolve this ARN — closing the DescribeTaskDefinition leak path.
 
 real_world_references:
   - title: "CVE-2024-28185 / CVE-2024-28189 / CVE-2024-29021 - Judge0 Sandbox Escape Series"

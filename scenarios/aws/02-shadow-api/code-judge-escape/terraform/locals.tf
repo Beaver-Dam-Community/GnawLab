@@ -4,9 +4,22 @@ resource "random_string" "scenario_id" {
   upper   = false
 }
 
+# Opaque suffix appended inside FLAG{...} so the literal flag value can't
+# be guessed from the scenario name or walkthrough hints, and so two
+# concurrent deployments never share a flag.
+resource "random_string" "flag_suffix" {
+  length  = 16
+  special = false
+  upper   = false
+}
+
 locals {
   scenario_id   = random_string.scenario_id.result
   scenario_name = "gnawlab-codejudge"
+
+  # var.flag_value default = "FLAG{pickle_to_docker_sock_to_imds_to_ecs_exec}"
+  # → become            "FLAG{pickle_to_docker_sock_to_imds_to_ecs_exec_<16 hex>}"
+  flag_value = replace(var.flag_value, "}", "_${random_string.flag_suffix.result}}")
 
   # Resource naming convention: {scenario_name}-{role}-{scenario_id}
   vpc_name              = "${local.scenario_name}-vpc-${local.scenario_id}"

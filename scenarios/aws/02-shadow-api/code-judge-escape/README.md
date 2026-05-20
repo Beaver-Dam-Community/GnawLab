@@ -37,6 +37,7 @@ to signed JSON is still open.
 - 1 ECS Fargate cluster + 1 task definition + 1 service running the `flag-vault` container in the private subnets
 - 2 IAM Roles + 1 EC2 Instance Profile (overprivileged EC2 role; minimal task role)
 - 2 Security Groups (VulnBoard ingress whitelisted to the learner IP; Fargate egress-only)
+- 1 SSM Parameter (SecureString) holding the flag value; injected into the Fargate task via the task definition's `secrets` field so the literal flag never appears in `aws ecs describe-task-definition` output
 
 ## Setup
 

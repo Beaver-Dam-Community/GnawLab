@@ -55,8 +55,11 @@ resource "aws_ecs_task_definition" "flag_vault" {
       initProcessEnabled = true
     }
 
-    environment = [
-      { name = "FLAG", value = var.flag_value }
+    # The flag value comes from SSM Parameter Store via the `secrets` field
+    # below, NOT via plain `environment`. This way `ecs:DescribeTaskDefinition`
+    # only leaks the parameter ARN, not the value itself.
+    secrets = [
+      { name = "FLAG", valueFrom = aws_ssm_parameter.flag.arn }
     ]
 
     entryPoint = ["/bin/sh", "-c"]

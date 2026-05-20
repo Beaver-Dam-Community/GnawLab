@@ -353,6 +353,19 @@ in is `ecs:ExecuteCommand`. The role you do have permits exactly that, so
 that is the realistic path. (Reference: Wiz, "The Many Ways to Obtain
 Credentials in AWS", 2024.)
 
+### Why Not Just Read the Flag from the Task Definition?
+
+`aws ecs describe-task-definition --task-definition <family>` is the obvious
+shortcut. The container spec it returns has a `secrets` array with
+`valueFrom = arn:aws:ssm:...:parameter/gnawlab/codejudge/<id>/flag`. Trying
+`aws ssm get-parameter --name /gnawlab/codejudge/<id>/flag --with-decryption`
+then returns `AccessDeniedException` - the stolen EC2 role does not have
+`ssm:GetParameters`. The task **execution** role can resolve the parameter
+at launch time, but you never get to assume it. The flag value only
+materialises inside the running container's process environment; `unset
+FLAG` removes it from `environ`, leaving `/app/data/flag.txt` as the only
+surviving copy - reachable solely via ECS Exec.
+
 ## Lessons Learned
 
 ### 1. Pickle is not a serializer

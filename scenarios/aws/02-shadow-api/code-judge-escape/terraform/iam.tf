@@ -109,6 +109,39 @@ resource "aws_iam_role_policy_attachment" "exec_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Only the ECS task EXECUTION role can resolve the flag SSM SecureString —
+# the EC2 app role (which the attacker steals via IMDS) is intentionally
+# NOT granted ssm:GetParameters, so the parameter ARN visible in the
+# task definition is useless to the attacker. The execution role pulls
+# the value on task launch and injects it as a container env var.
+resource "aws_iam_role_policy" "exec_ssm_flag" {
+  name = "${local.scenario_name}-exec-ssm-${local.scenario_id}"
+  role = aws_iam_role.exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ReadFlagParameter"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameters"]
+        Resource = aws_ssm_parameter.flag.arn
+      },
+      {
+        Sid      = "DecryptParameter"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "ssm.${var.region}.amazonaws.com"
+          }
+        }
+      },
+    ]
+  })
+}
+
 # --- ECS Task Role (runtime identity inside the flag container) ----------
 #
 # Minimal: only the SSM Messages permissions required for ECS Exec to land
