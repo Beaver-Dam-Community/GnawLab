@@ -1,13 +1,8 @@
 # Code Judge Escape
 
-> **Security Note**: Use placeholders for all AWS Account IDs, Access Keys, and Secret Keys.
-> - Account ID: `123456789012`
-> - Access Key: `AKIAIOSFODNN7EXAMPLE` or `ASIAXXXXXXXXXXX`
-> - Secret Key: `xxxxxxxx` or mask actual values
-
-**Difficulty:** Hard
-**Estimated Time:** 60-90 min
-**Category:** shadow-api / multi-hop-chain
+**Difficulty:** Hard  
+**Estimated Time:** 60-90 min  
+**Type:** multi-hop-chain
 
 ## Overview
 
@@ -77,6 +72,10 @@ the attack chain depends on private intelligence.
   - [wiz.io/blog/the-many-ways-to-obtain-credentials-in-aws](https://www.wiz.io/blog/the-many-ways-to-obtain-credentials-in-aws)
 - **ECScape** (Sweet Security / Naor Haziz, Black Hat USA 2025) - cross-task ECS credential theft. Relevant to the "Lessons Learned" section: explains why the lab uses Fargate (per-task microVM isolation) instead of ECS on EC2.
   - [GitHub PoC: naorhaziz/ecscape](https://github.com/naorhaziz/ecscape)
+- **AWS Documentation: Using Amazon ECS Exec for debugging** - canonical reference for the `ecs:ExecuteCommand` + `ssmmessages:*` channel mechanism that the final step of the chain exercises.
+  - [docs.aws.amazon.com/AmazonECS/.../ecs-exec.html](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html)
+- **Wiz Research: Tracking TeamPCP - Investigating Post-Compromise Attacks Seen in the Wild** (2026) - documents real-world threat-actor abuse of ECS Exec (SSM Agent-backed) to execute commands inside running containers as part of a post-compromise chain - the same primitive the scenario teaches.
+  - [wiz.io/blog/tracking-teampcp-investigating-post-compromise-attacks-seen-in-the-wild](https://www.wiz.io/blog/tracking-teampcp-investigating-post-compromise-attacks-seen-in-the-wild)
 - MITRE ATT&CK: [T1611 - Escape to Host](https://attack.mitre.org/techniques/T1611/), [T1552.005 - Cloud Instance Metadata API](https://attack.mitre.org/techniques/T1552/005/), [T1021.008 - Direct Cloud VM Connections](https://attack.mitre.org/techniques/T1021/008/)
 
 ## Cleanup
