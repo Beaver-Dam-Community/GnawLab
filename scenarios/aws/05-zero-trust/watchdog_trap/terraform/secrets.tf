@@ -12,5 +12,5 @@ resource "aws_secretsmanager_secret" "flag" {
 
 resource "aws_secretsmanager_secret_version" "flag" {
   secret_id     = aws_secretsmanager_secret.flag.id
-  secret_string = "FLAG{d3pl0y_p1p3l1n3_h1j4ck_2026}"
+  secret_string = "FLAG{deploy_pipeline_hijack_complete}"
 }
