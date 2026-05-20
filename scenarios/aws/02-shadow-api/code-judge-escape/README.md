@@ -47,13 +47,11 @@ Starting from nothing but the public IP in `target_info.txt`, players must explo
 
 ## Scenario Resources
 
-- 1 VPC (10.42.0.0/16) with one public subnet and two private subnets across AZ a/b
-- 1 NAT Gateway (egress for Fargate pulls and ECS Exec SSM channels)
-- 1 EC2 instance hosting VulnBoard (Amazon Linux 2023, IMDSv2 required, `hop_limit = 1`, `/var/run/docker.sock` mounted into the app container)
-- 1 ECS Fargate cluster + 1 task definition + 1 service running the private `flag-vault` container
-- 2 IAM Roles + 1 EC2 Instance Profile (overprivileged EC2 role; minimal task role)
-- 2 Security Groups (VulnBoard ingress whitelisted to the learner IP; Fargate egress-only)
-- 1 SSM Parameter (SecureString) holding the flag value; injected into the Fargate task via the task definition's `secrets` field so the literal flag never appears in `aws ecs describe-task-definition` output
+- 1 VPC with one public subnet and two private subnets
+- 1 EC2 instance running an internally-built coding-evaluation web application (VulnBoard) exposed via HTTP
+- 1 ECS Fargate task in the private subnet that holds the flag
+- 3 IAM Roles + 1 EC2 Instance Profile
+- 2 Security Groups (one for the public web app, one for the private Fargate task)
 
 ## Starting Point
 
