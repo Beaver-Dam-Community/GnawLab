@@ -481,7 +481,7 @@ $ aws s3api list-object-versions --bucket $VAULT_BUCKET
             "Key": "tracklist.txt",
             "VersionId": "<tracklist-version-id>",
             "IsLatest": false,
-            "Size": 312,
+            "Size": 314,
             "LastModified": "2026-05-18T09:23:47.000Z"
         },
         {
@@ -552,7 +552,7 @@ $ aws s3api get-object \
 {
     "DeleteMarker": false,
     "VersionId": "<tracklist-version-id>",
-    "ContentLength": 312,
+    "ContentLength": 314,
     "ContentType": "text/plain"
 }
 ```
