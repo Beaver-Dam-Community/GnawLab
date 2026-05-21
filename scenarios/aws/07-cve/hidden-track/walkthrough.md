@@ -333,7 +333,7 @@ Imported keys as "imported-lambda_exec"
 ### 6.2 Run Enumeration
 
 ```
-Pacu (hidden_track) > run iam__bruteforce_permissions --region us-east-1
+$ pacu --session hidden_track --exec --module-name iam__bruteforce_permissions --module-args "--region us-east-1"
 ```
 
 `iam__bruteforce_permissions` iterates over every API call in its library and records which ones succeed. Output:
