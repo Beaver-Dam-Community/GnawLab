@@ -36,7 +36,6 @@ init_db()
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
-# ── CSS ──────────────────────────────────────────────────────────────────────
 CSS = """
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: system-ui, sans-serif; background: #12121f; color: #ccc; }
@@ -84,7 +83,6 @@ input:focus { border-color: #f5a623; }
 a { color: #f5a623; text-decoration: none; }
 """
 
-# ── TEMPLATES ─────────────────────────────────────────────────────────────────
 HOME_HTML = """<!DOCTYPE html><html lang='en'><head><title>BeaverSound — Artist Portal</title>
 <meta charset='utf-8'><style>""" + CSS + """</style></head><body>
 <nav class='nav'>
@@ -240,7 +238,6 @@ NEWS_HTML = """<!DOCTYPE html><html lang='en'><head><title>BeaverSound News</tit
   </div>
 </div></body></html>"""
 
-# ── ROUTES ────────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     user = session.get('user_name')

