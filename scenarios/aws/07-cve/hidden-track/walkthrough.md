@@ -194,8 +194,8 @@ Verify the magic bytes are correct:
 ```
 $ xxd malicious.mp4 | head -3
 00000000: 4154 2654 464f 524d 0000 0076 444a 5655  AT&TFORM...vDJVU
-00000010: 494e 464f 0000 000a 0001 0001 0018 0018  INFO........
-00000020: 001a 416e 5461 0000 0058 286d 6574 6164  ..ANTa...X(metad
+00000010: 494e 464f 0000 000a 0001 0001 001a 0064  INFO...........d
+00000020: 2c00 414e 5461 0000 0057 286d 6574 6164  ,.ANTa...W(metad
 ```
 
 `AT&TFORM` at offset 0 — ExifTool will parse this as DjVu regardless of the `.mp4` extension.
@@ -607,7 +607,7 @@ internal-id: flag{rock_and_roll_never_dies}
    ↓ VAULT_BUCKET / UPLOADS_BUCKET
 9. sts:GetCallerIdentity
    ↓ beaversound-lambda-exec role confirmed
-10. Pacu iam__enum_permissions (brute-force)
+10. Pacu iam__bruteforce_permissions
     ↓ IAM, Lambda, EC2, SecretsManager, SSM, CloudTrail → AccessDenied
     ↓ Pivot decision: S3 only (bucket names already known from env vars)
 11. s3:ListBucket — uploads bucket
@@ -735,7 +735,7 @@ Replace `s3:*` with the minimum required for the Lambda pipeline:
 ```json
 {
   "Effect": "Allow",
-  "Action": ["s3:PutObject", "s3:CopyObject"],
+  "Action": ["s3:PutObject"],
   "Resource": "arn:aws:s3:::beaversound-vault-*/*"
 }
 ```
