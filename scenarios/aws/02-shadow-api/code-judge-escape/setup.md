@@ -6,7 +6,7 @@
 - Terraform >= 1.5.0
 - Outbound HTTPS to `ifconfig.co` (only for IP auto-detection; pass `-var="whitelist_ip=..."` to skip)
 - `nmap`, `curl`, and `python3` on the attacking machine
-- `session-manager-plugin` (only needed for Phase 4 ECS Exec; install via the official AWS docs)
+- `session-manager-plugin` (required by the final ECS Exec step; install via the official AWS docs)
 
 The scenario must be deployed in `us-east-1` (enforced by `variables.tf`).
 
@@ -19,12 +19,10 @@ terraform plan
 terraform apply
 ```
 
-The bootstrap takes roughly 4-6 minutes end-to-end:
+The bootstrap takes roughly 5–8 minutes end-to-end:
 
-1. VPC, NAT Gateway, IAM roles - ~90 seconds
-2. EC2 instance reaches `running` - ~30 seconds
-3. user_data installs Docker, builds the VulnBoard image, and starts the container - ~2-3 minutes
-4. Fargate service reaches steady state - ~60 seconds
+1. VPC, NAT Gateway, IAM roles, and EC2 / Fargate provisioning: ~4–6 minutes
+2. EC2 `user_data` installs Docker, builds the VulnBoard image, and starts the container: ~2–3 minutes
 
 You can tail the EC2 bootstrap log if VulnBoard is not yet responding:
 

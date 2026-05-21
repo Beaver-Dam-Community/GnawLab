@@ -34,8 +34,11 @@ aws ecs list-clusters --query "clusterArns[?contains(@, 'gnawlab-codejudge')]"
 
 aws iam list-roles \
   --query "Roles[?starts_with(RoleName, 'gnawlab-codejudge-')].RoleName"
+
+aws ssm describe-parameters \
+  --query "Parameters[?starts_with(Name, '/gnawlab/codejudge/')].Name"
 ```
 
-All three queries should return an empty array.
+All four queries should return an empty array.
 
-> **Warning:** A leftover NAT Gateway alone costs ~$1/day. Always verify cleanup before walking away.
+> **Warning:** Always verify cleanup before walking away; a stranded NAT Gateway keeps billing until it's destroyed.
