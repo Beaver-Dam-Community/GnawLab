@@ -424,7 +424,11 @@ $ aws s3api get-object-tagging \
     "TagSet": [
         {"Key": "Artist",         "Value": "Maya Arden"},
         {"Key": "Classification", "Value": "CONFIDENTIAL"},
-        {"Key": "Scenario",       "Value": "hidden-track"}
+        {"Key": "Environment",    "Value": "training"},
+        {"Key": "ManagedBy",      "Value": "terraform"},
+        {"Key": "Project",        "Value": "GnawLab"},
+        {"Key": "Scenario",       "Value": "hidden-track"},
+        {"Key": "Suffix",         "Value": "<suffix>"}
     ]
 }
 ```
