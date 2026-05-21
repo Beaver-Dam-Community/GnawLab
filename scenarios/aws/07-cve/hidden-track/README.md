@@ -79,7 +79,7 @@ flowchart TB
     E --> G["Lambda triggered<br/>ExifTool RCE"]
     G --> H["AWS credentials leaked<br/>VAULT_BUCKET exposed"]
     H --> I["sts:GetCallerIdentity<br/>lambda-exec confirmed"]
-    I --> I2["Pacu iam__enum_permissions<br/>All services denied"]
+    I --> I2["Pacu iam__bruteforce_permissions<br/>All services denied"]
     I2 --> J["s3:ListBucket vault<br/>Target not visible"]
     J --> K["CONFIDENTIAL tag<br/>Delete Marker confirmed"]
     K --> L["Versioning Enabled<br/>Previous version found"]

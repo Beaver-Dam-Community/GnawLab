@@ -718,7 +718,7 @@ aws s3api get-object \
 
 - `s3:*` on the vault was set during development and never scoped down.
 - This wildcard includes `s3:ListBucketVersions` and `s3:GetObject` with `versionId` — exactly what version recovery requires.
-- A scoped policy (`s3:PutObject` and `s3:CopyObject` on specific prefixes only) would have prevented enumeration of version history entirely.
+- A scoped policy (`s3:PutObject` on specific prefixes only) would have prevented enumeration of version history entirely.
 
 ---
 
