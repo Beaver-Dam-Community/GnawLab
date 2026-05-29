@@ -80,7 +80,7 @@ Resources created:
 - 1 VPC with public subnet, IGW, and route table
 - 1 Security Group (HTTP access whitelisted to your IP)
 - 1 EC2 instance (BeaverSound artist portal)
-- 2 IAM roles (Lambda exec, portal EC2)
+- 3 IAM roles (Lambda exec, portal EC2, GuardDuty Malware Protection)
 - 1 Lambda function (`process-upload`) with ExifTool 12.23 layer
 - 1 Lambda layer (ExifTool 12.23)
 - 2 S3 buckets (uploads, vault)
@@ -168,12 +168,14 @@ aws ec2 describe-instances \
   --profile GnawLab
 ```
 
-Then check user_data log (SSH or SSM):
+Then check user_data log via EC2 Instance Connect (no key pair required):
+
+1. Open the [EC2 Console → Instances](https://console.aws.amazon.com/ec2/home#Instances)
+2. Select the instance tagged `Scenario=hidden-track`
+3. Click **Connect → EC2 Instance Connect → Connect**
+4. On the instance:
 
 ```bash
-# Via SSM Session Manager (no key pair required)
-aws ssm start-session --target <instance-id> --profile GnawLab
-# On the instance:
 cat /var/log/cloud-init-output.log | tail -50
 systemctl status beaversound
 ```

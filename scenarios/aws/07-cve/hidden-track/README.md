@@ -35,6 +35,7 @@ Nobody checked whether S3 Versioning was enabled.
 - Generate a DjVu exploit payload (ANTa chunk) that triggers RCE inside a Lambda pipeline
 - Understand why GuardDuty Malware Protection for S3 does not block this attack
 - Extract AWS IAM credentials from a Lambda execution environment via RCE
+- Use Pacu to enumerate the blast radius of a compromised IAM role and determine pivot paths
 - Demonstrate that S3 Versioning preserves deleted objects and exploit the over-permissive IAM role to recover them
 
 ## Scenario Resources
