@@ -216,23 +216,30 @@ aws_secret_access_key = YOUR_ADMIN_SECRET
 Ensure you ran `bash scripts/build_exiftool_layer.sh` before `terraform apply`.
 The zip must exist at `terraform/exiftool-layer.zip`.
 
-### Lambda fails — perl not found
+### Lambda fails — ExifTool returns no output
 
-Lambda runtimes do not include Perl in the execution
-environment. The `handler.py` already handles this: it tries real ExifTool via
-Perl first, and if `FileNotFoundError` or `PermissionError` is raised, it falls
-back to a Python-native CVE-2021-22204 simulation.
+The ExifTool layer provides the Perl script and library modules at `/opt/`.
+The Python 3.9 runtime (Amazon Linux 2) includes system Perl at `/usr/bin/perl`,
+so `handler.py` normally invokes real ExifTool:
 
-The Python simulation (`_python_exiftool()` in `assets/lambda/handler.py`):
-1. Reads the uploaded file and checks for the `AT&TFORM` DjVu magic bytes.
-2. Parses IFF chunks to find `ANTa` (annotation) data.
-3. Extracts the `system(q(CMD))` pattern via regex — exactly the ParseAnt() eval path.
-4. Executes the command via `subprocess.run(cmd, shell=True)`.
-5. Returns realistic fake ExifTool 12.23 metadata output.
+```
+perl /opt/bin/exiftool <file>
+```
 
-No Perl binary is required. The ExifTool layer (`exiftool-layer.zip`) is still
-deployed so the lambda shows the real version banner — but execution uses the
-Python path in practice. No action needed.
+Under normal deployment, real ExifTool runs — the baseline upload (Step 1.5 of the
+walkthrough) shows `File Type: TXT`, not `File Type: Binary`.
+
+If ExifTool execution fails (e.g., corrupted layer zip, missing `/opt/bin/exiftool`),
+`handler.py` falls back to a Python-native CVE-2021-22204 simulation (`_python_exiftool()`):
+
+1. Checks for `AT&TFORM` DjVu magic bytes.
+2. Parses `ANTa` chunks and extracts the `system(q(CMD))` pattern via regex.
+3. Executes the command via `subprocess.run(cmd, shell=True)`.
+4. Returns fake ExifTool 12.23 metadata (`File Type: Binary` for non-DjVu files).
+
+If you consistently see `File Type: Binary` for plain text uploads, real ExifTool is
+not running — rebuild the layer with `bash scripts/build_exiftool_layer.sh` and
+re-apply Terraform.
 
 ## Cost Estimate
 

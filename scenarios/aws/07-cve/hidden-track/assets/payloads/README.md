@@ -62,12 +62,20 @@ the content as `debug_output` in the JSON response.
 Expected captured variables inside Lambda:
 | Variable | Contents |
 |---|---|
+| `AWS_LAMBDA_FUNCTION_NAME` | `beaversound-process-upload-<suffix>` |
+| `AWS_REGION` / `AWS_DEFAULT_REGION` | `us-east-1` |
 | `AWS_ACCESS_KEY_ID` | Lambda execution role access key |
 | `AWS_SECRET_ACCESS_KEY` | Lambda execution role secret |
 | `AWS_SESSION_TOKEN` | Lambda execution role session token |
-| `AWS_REGION` | `us-east-1` |
+| `AWS_EXECUTION_ENV` | `AWS_Lambda_python3.9` |
 | `VAULT_BUCKET` | `beaversound-vault-<suffix>` |
 | `UPLOADS_BUCKET` | `beaversound-uploads-<suffix>` |
+
+The grep pattern matches ~15 `AWS_*` variables in total. The Lambda runtime also
+injects `AWS_LAMBDA_FUNCTION_MEMORY_SIZE`, `AWS_LAMBDA_FUNCTION_VERSION`,
+`AWS_LAMBDA_LOG_GROUP_NAME`, `AWS_LAMBDA_LOG_STREAM_NAME`, `AWS_LAMBDA_RUNTIME_API`,
+and X-Ray config variables. The security-relevant values are the credential trio and
+the two bucket names.
 
 ## Customization
 

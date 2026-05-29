@@ -14,7 +14,7 @@
 #   bin/exiftool     — ExifTool Perl script
 #   lib/             — ExifTool Perl library modules (Image::ExifTool::*)
 #
-# The Lambda Python 3.11 runtime (Amazon Linux 2023) includes system Perl.
+# The Lambda Python 3.9 runtime (Amazon Linux 2) includes system Perl at /usr/bin/perl.
 # The handler sets PERL5LIB=/opt/lib before invoking perl /opt/bin/exiftool.
 
 set -euo pipefail
