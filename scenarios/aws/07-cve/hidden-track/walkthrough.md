@@ -23,7 +23,7 @@ $ curl -sv http://<portal-ip>/ 2>&1 | grep "^[<>]"
 < Content-Type: text/html; charset=utf-8
 ```
 
-**Finding:** Werkzeug — Flask application on Python 3.9. No version info on ExifTool yet, but the stack is identified.
+**Finding:** Werkzeug/Flask — server-side application. Uploaded files are processed on the server, not in the browser. The question now is: what processes them?
 
 ### 1.2 Browse Visible Pages — News
 
@@ -92,6 +92,8 @@ Note the GuardDuty mention. Assess it before acting (Step 3).
 
 ### 1.4 Confirm ExifTool Runs on Every Upload
 
+The Werkzeug finding established that files are processed server-side. The dashboard names the processor.
+
 ### Method 1: Using Browser
 
 After login, the **Platform Info** card on the dashboard displays:
@@ -114,7 +116,7 @@ $ curl -s -D - -X POST http://<portal-ip>/upload \
 X-Processor: ExifTool/12.23
 ```
 
-**Confirmed.** The `X-Processor` header is set from the Lambda function's return value. ExifTool runs synchronously — the response only returns after ExifTool finishes. This means any output ExifTool produces (or any side-effect it triggers) happens before we get a response back.
+**Confirmed.** The server-side processor is ExifTool 12.23 — the answer to the question raised in Step 1.1. The `X-Processor` header is set from the Lambda function's return value. ExifTool runs synchronously — the response only returns after ExifTool finishes. This means any output ExifTool produces (or any side-effect it triggers) happens before we get a response back.
 
 ### 1.5 Baseline — Normal File Upload
 
