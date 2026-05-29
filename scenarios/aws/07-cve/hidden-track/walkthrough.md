@@ -378,7 +378,7 @@ Everything else — IAM, Lambda, EC2, Secrets Manager, SSM, CloudTrail — retur
 ### 7.1 Enumerate the Uploads Bucket
 
 ```
-$ aws s3 ls s3://$UPLOADS_BUCKET/
+$ aws s3 ls s3://$UPLOADS_BUCKET/ --recursive
 
 2026-05-18 11:32:18       130 uploads/<uuid>/malicious.mp4
 ```
