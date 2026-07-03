@@ -120,6 +120,10 @@ resource "aws_lambda_function" "chat_backend" {
       AGENT_ID               = aws_bedrockagent_agent.main.agent_id
       AGENT_ALIAS_ID         = aws_bedrockagent_agent_alias.prod.agent_alias_id
       SOURCE_LINK_ISSUER_ARN = aws_lambda_function.source_link_issuer.arn
+      CATALOG_TABLE          = aws_dynamodb_table.document_catalog.name
+      WORKSPACE_BUCKET       = aws_s3_bucket.workspace.id
+      KB_ID                  = aws_bedrockagent_knowledge_base.main.id
+      DATA_SOURCE_ID         = aws_bedrockagent_data_source.public_prefix.data_source_id
     }
   }
 }

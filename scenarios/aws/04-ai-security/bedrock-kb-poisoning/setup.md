@@ -9,7 +9,7 @@
 - AWS CLI profile `GnawLab` configured with admin credentials
 - **us-east-1** region (Bedrock Agent + Bedrock Knowledge Base availability)
 - **Bedrock model access** approved for:
-  - `anthropic.claude-3-haiku-20240307-v1:0`
+  - `us.anthropic.claude-haiku-4-5-20251001-v1:0`
   - `amazon.titan-embed-text-v2:0`
 
 ## Step 1: Configure AWS CLI Profile
@@ -30,26 +30,32 @@ Verify:
 aws sts get-caller-identity --profile GnawLab
 ```
 
-## Step 2: Enable Bedrock Foundation Models
+## Step 2: Enable Bedrock Models
 
-Bedrock requires per-account, per-region opt-in for each foundation model. Open
-the [Bedrock console → Model access](https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/modelaccess)
+Bedrock requires per-account, per-region opt-in for each model. Open
+the [Bedrock console Model access page](https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/modelaccess)
 and request access to:
 
-- **Anthropic — Claude 3 Haiku**
-- **Amazon — Titan Text Embeddings V2**
+- **Anthropic Claude Haiku 4.5**
+- **Amazon Titan Text Embeddings V2**
 
 Approval is usually instant for non-Anthropic models and within minutes for
-Claude. You can verify from the CLI:
+Claude. Recent Anthropic models use Bedrock inference profiles for on-demand
+invocation. You can verify the profile and embedding model from the CLI:
 
 ```bash
+aws bedrock list-inference-profiles \
+  --region us-east-1 --profile GnawLab \
+  --query 'inferenceProfileSummaries[?inferenceProfileId==`us.anthropic.claude-haiku-4-5-20251001-v1:0`].[inferenceProfileId,status]' \
+  --output table
+
 aws bedrock list-foundation-models \
   --region us-east-1 --profile GnawLab \
-  --query 'modelSummaries[?contains(modelId, `claude-3-haiku`) || contains(modelId, `titan-embed-text-v2`)].[modelId,modelLifecycle.status]' \
+  --query 'modelSummaries[?modelId==`amazon.titan-embed-text-v2:0`].[modelId,modelLifecycle.status]' \
   --output table
 ```
 
-If either model is missing or not in `ACTIVE` state, the apply will fail at the
+If either entry is missing or not in `ACTIVE` state, the apply will fail at the
 Bedrock Agent / Knowledge Base step.
 
 ## Step 3: Navigate to Terraform Directory
@@ -95,7 +101,7 @@ You should see ~110 resources being created, including:
   `kb_ingestion_trigger`, `cognito_pre_signup`, `cognito_post_confirmation`)
 - 1 S3 workspace bucket + 1 DynamoDB `document_catalog` table
 - 1 KMS CMK
-- 1 API Gateway REST API (`/api/chat`)
+- 1 API Gateway REST API (`/api/chat`, `/api/docs`)
 - 1 CloudFront distribution + WAFv2 web ACL
 - 1 S3 web hosting bucket (BPO console SPA + FitMall storefront)
 
@@ -188,7 +194,7 @@ whitelist_ip = "1.2.3.4/32"
 profile = "my-admin-profile"
 
 # Optional: switch Bedrock models (must already be approved on the account)
-agent_model_id     = "anthropic.claude-3-haiku-20240307-v1:0"
+agent_model_id     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 embedding_model_id = "amazon.titan-embed-text-v2:0"
 
 # Optional: override the seeded BPO / seller email domains and accounts

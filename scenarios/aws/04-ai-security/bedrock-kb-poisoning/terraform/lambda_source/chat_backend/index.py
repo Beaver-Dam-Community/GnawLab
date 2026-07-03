@@ -1,6 +1,6 @@
-"""TokTok-Support /chat backend.
+"""TokTok-Support API backend.
 
-Flow per request:
+Flow for /api/chat:
   1. Receive a JSON body {message, sessionId} with the caller's Cognito JWT
      already verified by API Gateway's Cognito authorizer.
   2. Call Bedrock Agent InvokeAgent. Aggregate the streaming response into a
@@ -16,6 +16,11 @@ Flow per request:
 
 The console QA screen relies on the response containing `raw` (with original
 source tags) and `rendered` (with substituted URLs).
+
+Flow for /api/docs:
+  1. Accept a FAQ document edit from bpo_editor or seller_admin.
+  2. Write the Markdown back to S3 under public/faq/.
+  3. Start a Bedrock Knowledge Base ingestion job.
 """
 
 import json
@@ -24,15 +29,24 @@ import re
 import uuid
 
 import boto3
+from botocore.exceptions import ClientError
 
 bedrock_agent_runtime = boto3.client("bedrock-agent-runtime")
+bedrock_agent = boto3.client("bedrock-agent")
 lambda_client = boto3.client("lambda")
+s3_client = boto3.client("s3")
+dynamodb = boto3.resource("dynamodb")
 
 AGENT_ID = os.environ["AGENT_ID"]
 AGENT_ALIAS_ID = os.environ["AGENT_ALIAS_ID"]
 SOURCE_LINK_ISSUER_ARN = os.environ["SOURCE_LINK_ISSUER_ARN"]
+CATALOG_TABLE = os.environ["CATALOG_TABLE"]
+WORKSPACE_BUCKET = os.environ["WORKSPACE_BUCKET"]
+KB_ID = os.environ["KB_ID"]
+DATA_SOURCE_ID = os.environ["DATA_SOURCE_ID"]
 
 SOURCE_TAG = re.compile(r"\[source:\s*([A-Za-z0-9_./\-]+)\s*\]")
+catalog_table = dynamodb.Table(CATALOG_TABLE)
 
 
 def _cors():
@@ -91,6 +105,25 @@ def _parse_inline_doc_ids(text):
     return SOURCE_TAG.findall(text or "")
 
 
+def _jwt_from_event(event):
+    claims = (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("claims")
+        or {}
+    )
+    jwt_groups = claims.get("cognito:groups") or ""
+    return {
+        "sub": claims.get("sub"),
+        "email": claims.get("email"),
+        "groups": (
+            [g.strip() for g in jwt_groups.split(",") if g.strip()]
+            if isinstance(jwt_groups, str)
+            else jwt_groups
+        ),
+    }
+
+
 def _resolve_links(doc_ids, jwt):
     """Invoke source_link_issuer Lambda synchronously."""
     if not doc_ids:
@@ -117,34 +150,68 @@ def _render(output_text, links):
     return SOURCE_TAG.sub(_sub, output_text)
 
 
+def _save_doc(event, jwt):
+    groups = jwt.get("groups") or []
+    if "bpo_editor" not in groups and "seller_admin" not in groups:
+        return _resp(403, {"error": "forbidden"})
+
+    body = json.loads(event.get("body") or "{}")
+    doc_id = (body.get("document_id") or "").strip()
+    content = body.get("content")
+    if not doc_id or not isinstance(content, str):
+        return _resp(400, {"error": "document_id and content are required"})
+
+    item = catalog_table.get_item(Key={"document_id": doc_id}).get("Item")
+    if not item:
+        return _resp(404, {"error": "unknown_doc"})
+
+    key = item.get("s3_key") or ""
+    if not key.startswith("public/faq/"):
+        return _resp(403, {"error": "faq_docs_only"})
+
+    s3_client.put_object(
+        Bucket=WORKSPACE_BUCKET,
+        Key=key,
+        Body=content.encode("utf-8"),
+        ContentType="text/markdown; charset=utf-8",
+    )
+    status = "sync_started"
+    ingestion_job_id = None
+    try:
+        job = bedrock_agent.start_ingestion_job(
+            knowledgeBaseId=KB_ID,
+            dataSourceId=DATA_SOURCE_ID,
+            description=f"FAQ save: {doc_id}",
+        )
+        ingestion_job_id = job.get("ingestionJob", {}).get("ingestionJobId")
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") != "ConflictException":
+            raise
+        status = "sync_already_running"
+
+    return _resp(
+        200,
+        {
+            "status": status,
+            "document_id": doc_id,
+            "ingestion_job_id": ingestion_job_id,
+        },
+    )
+
+
 def lambda_handler(event, context):
     if event.get("httpMethod") == "OPTIONS":
         return _resp(200, {})
+
+    jwt = _jwt_from_event(event)
+    if (event.get("path") or "").endswith("/docs"):
+        return _save_doc(event, jwt)
 
     body = json.loads(event.get("body") or "{}")
     message = (body.get("message") or "").strip()
     session_id = body.get("sessionId") or str(uuid.uuid4())
     if not message:
         return _resp(400, {"error": "message is required"})
-
-    # Extract the JWT that API Gateway already validated via the Cognito
-    # authorizer. The `claims` object is forwarded by the authorizer.
-    claims = (
-        event.get("requestContext", {})
-        .get("authorizer", {})
-        .get("claims")
-        or {}
-    )
-    jwt_groups = claims.get("cognito:groups") or ""
-    jwt = {
-        "sub": claims.get("sub"),
-        "email": claims.get("email"),
-        "groups": (
-            [g.strip() for g in jwt_groups.split(",") if g.strip()]
-            if isinstance(jwt_groups, str)
-            else jwt_groups
-        ),
-    }
 
     raw_text, retrieved_ids = _invoke_agent(message, session_id)
     inline_ids = _parse_inline_doc_ids(raw_text)

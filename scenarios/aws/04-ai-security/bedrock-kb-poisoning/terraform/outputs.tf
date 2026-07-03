@@ -52,6 +52,11 @@ output "chat_api_url" {
   value       = "${aws_api_gateway_stage.prod.invoke_url}/api/chat"
 }
 
+output "docs_api_url" {
+  description = "Direct API Gateway /api/docs endpoint used by the FAQ editor."
+  value       = "${aws_api_gateway_stage.prod.invoke_url}/api/docs"
+}
+
 output "user_pool_id" {
   description = "Cognito User Pool ID."
   value       = aws_cognito_user_pool.main.id
@@ -60,6 +65,26 @@ output "user_pool_id" {
 output "user_pool_client_id" {
   description = "Cognito User Pool app client ID (used by the SPA)."
   value       = aws_cognito_user_pool_client.spa.id
+}
+
+output "workspace_bucket" {
+  description = "Workspace S3 bucket containing public FAQ files and admin-only exports."
+  value       = aws_s3_bucket.workspace.id
+}
+
+output "document_catalog_table" {
+  description = "DynamoDB catalog that maps document IDs to S3 objects."
+  value       = aws_dynamodb_table.document_catalog.name
+}
+
+output "kb_id" {
+  description = "Bedrock Knowledge Base ID."
+  value       = aws_bedrockagent_knowledge_base.main.id
+}
+
+output "kb_data_source_id" {
+  description = "Bedrock Knowledge Base S3 data source ID."
+  value       = aws_bedrockagent_data_source.public_prefix.data_source_id
 }
 
 output "start_message" {

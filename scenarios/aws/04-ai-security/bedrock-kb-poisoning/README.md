@@ -38,7 +38,7 @@ Recover the protected April 2026 customer export and submit
   - [T1530 — Data from Cloud Storage](https://attack.mitre.org/techniques/T1530/)
 - **AWS docs**
   - [Bedrock Knowledge Bases — data sources](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base-ds.html)
-  - [Bedrock Agents — Action groups](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-action-groups.html)
+  - [Bedrock inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles.html)
 
 ## Learning Objectives
 
@@ -58,20 +58,21 @@ Recover the protected April 2026 customer export and submit
 ## Scenario Resources
 
 - **Identity / network**
-  - 1 Cognito User Pool, 2 groups (`seller_admin`, `bpo_editor`)
+  - 1 Cognito User Pool, 3 groups (`seller_admin`, `seller_manager`, `bpo_editor`)
   - 2 pre-seeded users (Kay = `bpo_editor`, FitMall owner = `seller_admin`)
   - 1 CloudFront distribution + WAFv2 web ACL (IP allow-list to `whitelist_ip`)
-  - 1 API Gateway REST API (`/api/chat`, Cognito authorizer + IP resource policy)
+  - 1 API Gateway REST API (`/api/chat`, `/api/docs`, Cognito authorizer + IP resource policy)
 - **Data plane**
   - 1 S3 workspace bucket (`public/faq/...`, `public/manuals/...`,
     `admin-only/customers/...`)
   - 1 DynamoDB `document_catalog` table (`document_id` ↔ `s3_key` ↔ allowed groups)
   - 1 KMS CMK
 - **AI plane**
-  - 1 Bedrock Agent (Claude 3 Haiku) with one action group → `chat_backend` Lambda
+  - 1 Bedrock Agent using the configured inference profile, with KB association only
   - 1 Bedrock Knowledge Base backed by Titan embeddings v2 + OpenSearch Serverless
 - **Lambda**
-  - `chat_backend` — invokes the Agent on behalf of the Cognito JWT
+  - `chat_backend` — handles `/api/chat`, invokes the Agent and renders citations
+  - `chat_backend` — handles `/api/docs`, writes FAQ edits and starts KB ingestion
   - `source_link_issuer` — mints presigned URLs from `[source: <doc_id>]` tags
     *(this is the vulnerable function)*
   - `kb_ingestion_trigger` — re-syncs the KB on every S3 `ObjectCreated:*`
@@ -121,8 +122,9 @@ FLAG{<customer_id>}
 > from any state — no manual pre-destroy script required.
 
 > **Warning:** This scenario creates real AWS resources (Bedrock Agent + Knowledge
-> Base, OpenSearch Serverless collection, CloudFront distribution, NAT-free VPC
-> endpoints). Estimated cost: **~$0.80 / hour idle, ~$2 / hour during walkthrough**.
+> Base, OpenSearch Serverless collection, API Gateway REST API and CloudFront
+> distribution). Estimated total cost is **< $2 for a 90-minute walkthrough** if
+> you destroy the stack promptly. OpenSearch Serverless is the dominant cost.
 > Always run `terraform destroy` when finished. See [cleanup.md](./cleanup.md).
 
 ## Walkthrough
@@ -139,7 +141,7 @@ flowchart TB
     G --> H["KB re-embeds + OpenSearch<br/>indexes the poisoned chunk"]
     H --> I["Ask Agent a VIP question<br/>via /api/chat"]
     I --> J["LLM emits<br/>[source: customer-export/fitmall/2026-04]"]
-    J --> K["Citation tab calls<br/>source_link_issuer"]
+    J --> K["chat_backend calls<br/>source_link_issuer"]
     K --> L{"Re-check caller<br/>group vs doc ACL?"}
     L -->|MISSING| M["Mint presigned URL<br/>for admin-only S3 object"]
     L -->|present| Y["403 — would be blocked"]

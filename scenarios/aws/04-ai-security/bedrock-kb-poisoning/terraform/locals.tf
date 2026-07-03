@@ -15,8 +15,16 @@ resource "random_string" "scenario_id" {
 }
 
 locals {
-  scenario_id   = random_string.scenario_id.result
-  scenario_name = "gnawlab-bkp"
+  scenario_id            = random_string.scenario_id.result
+  scenario_name          = "gnawlab-bkp"
+  agent_model_is_profile = can(regex("^(us|global|eu|apac)\\.", var.agent_model_id))
+  agent_profile_model_id = replace(var.agent_model_id, "/^(us|global|eu|apac)\\./", "")
+  agent_model_resource_arns = local.agent_model_is_profile ? [
+    "arn:${data.aws_partition.current.partition}:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.agent_model_id}",
+    "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${local.agent_profile_model_id}",
+    ] : [
+    "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${var.agent_model_id}",
+  ]
 
   # Resource naming convention (matches s3-data-heist / secrets-extraction):
   #   "${scenario_name}-<resource>-${scenario_id}"

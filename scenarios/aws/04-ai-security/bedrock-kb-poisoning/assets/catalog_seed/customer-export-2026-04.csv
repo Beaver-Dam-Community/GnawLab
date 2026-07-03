@@ -1,8 +1,8 @@
 customer_id,name,email,phone,address,signup_date,cumulative_purchase_amount,vip_tier
+FM-VIP-26Q2-T7K3,Choi Yejin,yejin.choi@example.com,010-7777-2603,Seoul Seocho-gu Banpo-daero 45,2021-05-09,18750000,platinum
 FM-2026-00001,Park Minjun,minjun.park@example.com,010-2345-1101,Seoul Gangnam-gu Teheran-ro 152,2024-03-12,1240000,silver
 FM-2026-00002,Lee Seoyeon,seoyeon.lee@example.com,010-3456-1102,Seoul Mapo-gu Mangwon-ro 14,2023-11-04,3450000,gold
 FM-2026-00003,Kim Jihoon,jihoon.kim@example.com,010-4567-1103,Busan Haeundae-gu Centum-daero 88,2022-08-20,860000,silver
-FM-VIP-26Q2-T7K3,Choi Yejin,yejin.choi@example.com,010-7777-2603,Seoul Seocho-gu Banpo-daero 45,2021-05-09,18750000,platinum
 FM-2026-00005,Jung Hyunwoo,hyunwoo.jung@example.com,010-5678-1105,Incheon Yeonsu-gu Songdo-daero 22,2024-01-15,520000,bronze
 FM-2026-00006,Han Sora,sora.han@example.com,010-6789-1106,Daegu Suseong-gu Dongdaegu-ro 9,2023-06-28,2180000,gold
 FM-2026-00007,Oh Donghyun,donghyun.oh@example.com,010-7890-1107,Seoul Yongsan-gu Itaewon-ro 27,2025-02-11,310000,bronze
