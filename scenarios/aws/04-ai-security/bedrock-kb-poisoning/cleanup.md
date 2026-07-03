@@ -17,8 +17,8 @@ two situations where a naive `terraform destroy` would otherwise stall:
 | Bedrock Agent has an alias bound to its `DRAFT` version | Terraform deletes `aws_bedrockagent_agent_alias.prod` before the agent itself, no manual help needed |
 | OpenSearch Serverless collection still referenced by KB | `aws_bedrockagent_knowledge_base.main` is destroyed before the collection (explicit `depends_on`) |
 
-Expected wall-clock time: **~6–9 min**. CloudFront is the slowest component
-(it has to fully `Disabled` → `Deleted`).
+Expected wall-clock time: **~6 to 9 min**. CloudFront is the slowest component
+(it has to go from `Disabled` to `Deleted`).
 
 ## Standard Cleanup
 
@@ -55,8 +55,8 @@ aws resourcegroupstaggingapi get-resources \
 
 > **Tagging API caveat.** Bedrock Agent / KMS keys can show up here for a
 > few minutes after destroy with state `PendingDeletion` (KMS) or
-> `ResourceNotFoundException` (Agent — tagging API cache). Re-running the
-> command 5–10 min later returns an empty list. Anything *not* in
+> `ResourceNotFoundException` because of the Agent tagging API cache. Re-running the
+> command 5 to 10 min later returns an empty list. Anything *not* in
 > `PendingDeletion` after that point should be cleaned up via the manual
 > checklist below.
 
@@ -74,8 +74,8 @@ rm -f  terraform/terraform.tfvars
 
 ## Manual Cleanup Checklist (Fallback)
 
-You should not need this — the destroy hooks above are what makes the
-scenario "any-state-destroyable" — but if `terraform destroy` reports a
+You should not need this. The destroy hooks above make the
+scenario "any-state-destroyable", but if `terraform destroy` reports a
 `ConflictException` / `ValidationException` on Bedrock or OpenSearch
 Serverless, run the section that matches the failing resource and re-run
 `terraform destroy`.
@@ -85,7 +85,7 @@ Serverless, run the section that matches the failing resource and re-run
 > them unique per deployment). They will not touch other scenarios in the
 > same account.
 
-### 1. Bedrock Agent (delete alias → agent)
+### 1. Bedrock Agent (delete alias, then agent)
 
 ```bash
 for a in $(aws bedrock-agent list-agents \
@@ -99,7 +99,7 @@ for a in $(aws bedrock-agent list-agents \
 done
 ```
 
-### 2. Bedrock Knowledge Base (stop jobs → delete data source → delete KB)
+### 2. Bedrock Knowledge Base (stop jobs, delete data source, delete KB)
 
 ```bash
 for kb in $(aws bedrock-agent list-knowledge-bases \
@@ -246,13 +246,13 @@ done
 
 ## Cost Verification
 
-Check the *AWS Billing Console* → current month → these line items should
+Check the *AWS Billing Console*, current month. These line items should
 **stop** accruing within ~30 minutes after destroy completes:
 
-- **Amazon Bedrock** — model invocations + Knowledge Base storage
-- **OpenSearch Serverless** — OCU-hour
-- **CloudFront** — request volume
-- **AWS WAF** — web ACL hours
+- **Amazon Bedrock**: model invocations + Knowledge Base storage
+- **OpenSearch Serverless**: OCU-hour
+- **CloudFront**: request volume
+- **AWS WAF**: web ACL hours
 
 KMS keys remain in the `PendingDeletion` state for 7 days; they are
 **not billable** during that window, but if you need to recreate the

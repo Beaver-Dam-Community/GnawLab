@@ -4,12 +4,12 @@
 
 - [Terraform](https://www.terraform.io/downloads) >= 1.5.0
 - [AWS CLI](https://aws.amazon.com/cli/) v2
-- `jq`, `curl`, `bash` (any modern Unix shell — tested on Ubuntu 24.04 LTS / WSL2)
+- `jq`, `curl`, `bash` (tested on Ubuntu 24.04 LTS / WSL2)
 - AWS Account with admin access (for resource creation)
 - AWS CLI profile `GnawLab` configured with admin credentials
 - **us-east-1** region (Bedrock Agent + Bedrock Knowledge Base availability)
 - **Bedrock model access** approved for:
-  - `anthropic.claude-3-haiku-20240307-v1:0`
+  - `us.anthropic.claude-haiku-4-5-20251001-v1:0`
   - `amazon.titan-embed-text-v2:0`
 
 ## Step 1: Configure AWS CLI Profile
@@ -30,26 +30,32 @@ Verify:
 aws sts get-caller-identity --profile GnawLab
 ```
 
-## Step 2: Enable Bedrock Foundation Models
+## Step 2: Enable Bedrock Models
 
-Bedrock requires per-account, per-region opt-in for each foundation model. Open
-the [Bedrock console → Model access](https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/modelaccess)
+Bedrock requires per-account, per-region opt-in for each model. Open
+the [Bedrock console Model access page](https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/modelaccess)
 and request access to:
 
-- **Anthropic — Claude 3 Haiku**
-- **Amazon — Titan Text Embeddings V2**
+- **Anthropic Claude Haiku 4.5**
+- **Amazon Titan Text Embeddings V2**
 
 Approval is usually instant for non-Anthropic models and within minutes for
-Claude. You can verify from the CLI:
+Claude. Recent Anthropic models use Bedrock inference profiles for on-demand
+invocation. You can verify the profile and embedding model from the CLI:
 
 ```bash
+aws bedrock list-inference-profiles \
+  --region us-east-1 --profile GnawLab \
+  --query 'inferenceProfileSummaries[?inferenceProfileId==`us.anthropic.claude-haiku-4-5-20251001-v1:0`].[inferenceProfileId,status]' \
+  --output table
+
 aws bedrock list-foundation-models \
   --region us-east-1 --profile GnawLab \
-  --query 'modelSummaries[?contains(modelId, `claude-3-haiku`) || contains(modelId, `titan-embed-text-v2`)].[modelId,modelLifecycle.status]' \
+  --query 'modelSummaries[?modelId==`amazon.titan-embed-text-v2:0`].[modelId,modelLifecycle.status]' \
   --output table
 ```
 
-If either model is missing or not in `ACTIVE` state, the apply will fail at the
+If either entry is missing or not in `ACTIVE` state, the apply will fail at the
 Bedrock Agent / Knowledge Base step.
 
 ## Step 3: Navigate to Terraform Directory
@@ -95,7 +101,7 @@ You should see ~110 resources being created, including:
   `kb_ingestion_trigger`, `cognito_pre_signup`, `cognito_post_confirmation`)
 - 1 S3 workspace bucket + 1 DynamoDB `document_catalog` table
 - 1 KMS CMK
-- 1 API Gateway REST API (`/api/chat`)
+- 1 API Gateway REST API (`/api/chat`, `/api/docs`)
 - 1 CloudFront distribution + WAFv2 web ACL
 - 1 S3 web hosting bucket (BPO console SPA + FitMall storefront)
 
@@ -105,9 +111,9 @@ You should see ~110 resources being created, including:
 terraform apply
 ```
 
-Type `yes` when prompted. **Expect ~22–28 minutes** for the first apply — the
+Type `yes` when prompted. **Expect ~22 to 28 minutes** for the first apply. The
 Bedrock Knowledge Base + OpenSearch Serverless collection alone take ~10 min,
-and the CloudFront distribution another ~5–8 min.
+and the CloudFront distribution another ~5 to 8 min.
 
 If the apply is interrupted (network, MFA timeout, etc.), simply re-run
 `terraform apply`. State is reconciled idempotently.
@@ -138,7 +144,7 @@ aws bedrock-agent start-ingestion-job \
   --data-source-id   "$DS_ID" \
   --description "initial seed ingestion (manual)"
 
-# Poll until COMPLETE (usually 30–90 s)
+# Poll until COMPLETE, usually 30 to 90 s
 while :; do
   STATUS=$(aws bedrock-agent list-ingestion-jobs \
     --knowledge-base-id "$KB_ID" \
@@ -165,7 +171,7 @@ Example:
 ```json
 {
   "email":    "kay@digitalcs.example.com",
-  "password": "Zxq8…",
+  "password": "Zxq8...",
   "groups":   ["bpo_editor"]
 }
 ```
@@ -188,7 +194,7 @@ whitelist_ip = "1.2.3.4/32"
 profile = "my-admin-profile"
 
 # Optional: switch Bedrock models (must already be approved on the account)
-agent_model_id     = "anthropic.claude-3-haiku-20240307-v1:0"
+agent_model_id     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 embedding_model_id = "amazon.titan-embed-text-v2:0"
 
 # Optional: override the seeded BPO / seller email domains and accounts
@@ -200,14 +206,14 @@ owner_email         = "owner@fitmall.example.com"
 
 ## Re-running, parallel runs, and destroy semantics
 
-The Terraform module is built to be **idempotent** — you can re-apply on top
+The Terraform module is built to be **idempotent**. You can re-apply on top
 of a partial state, run multiple copies of the scenario in the same AWS
 account, and destroy from any state without scripts:
 
 - `random_string.scenario_id` (8 lowercase alphanumeric chars) is generated on
   first apply and pinned in `terraform.tfstate`. Every globally / regionally
   unique name (`aws_s3_bucket`, `aws_iam_role`, `aws_cognito_user_pool`,
-  `aws_bedrockagent_*`, `aws_opensearchserverless_collection`, KMS alias, …)
+  `aws_bedrockagent_*`, `aws_opensearchserverless_collection`, KMS alias and other resources)
   follows the GnawLab convention `gnawlab-bkp-<resource>-${scenario_id}`,
   matching `s3-data-heist`, `secrets-extraction`, etc. **Re-applying never
   recreates these resources.**
@@ -248,7 +254,7 @@ Your public IP no longer matches the WAFv2 IP set. Re-run
 The Bedrock Guardrail tripped. The seeded prompt-injection in the walkthrough
 is mild enough to bypass it, but if you experimented with stronger payloads
 the guardrail may have started flagging the query itself. Tone the payload
-down — see [walkthrough.md](./walkthrough.md) Step 4 for a known-good shape.
+down. See [walkthrough.md](./walkthrough.md) Step 4 for a known-good shape.
 
 ### KB returns the original FAQ even after editing it
 
@@ -270,7 +276,7 @@ terraform refresh
 ```
 
 If you see drift on `aws_s3_object.faq_*` after manual edits, that is
-expected — the seed files are under Terraform's content control. The
+expected. The seed files are under Terraform's content control. The
 walkthrough does its poisoning via the BPO console (which writes through
 `chat_backend` Lambda using a different etag) so it does not collide with
 state.

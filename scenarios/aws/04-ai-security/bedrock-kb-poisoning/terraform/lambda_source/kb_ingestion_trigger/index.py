@@ -6,6 +6,7 @@ ingestion job so the chatbot can answer using the new content within ~30s.
 
 import os
 import boto3
+from botocore.exceptions import ClientError
 
 bedrock_agent = boto3.client("bedrock-agent")
 
@@ -14,9 +15,13 @@ DATA_SOURCE_ID = os.environ["DATA_SOURCE_ID"]
 
 
 def lambda_handler(event, context):
-    bedrock_agent.start_ingestion_job(
-        knowledgeBaseId=KB_ID,
-        dataSourceId=DATA_SOURCE_ID,
-        description="Triggered by S3 ObjectCreated under public/",
-    )
+    try:
+        bedrock_agent.start_ingestion_job(
+            knowledgeBaseId=KB_ID,
+            dataSourceId=DATA_SOURCE_ID,
+            description="Triggered by S3 ObjectCreated under public/",
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") != "ConflictException":
+            raise
     return {"status": "ingestion_started"}

@@ -1,166 +1,102 @@
 # Bedrock Knowledge Base Poisoning
 
 **Difficulty:** Hard
-**Estimated Time:** 60–90 min (≈25 min `terraform apply`, then attack)
-**Type:** multi-hop
+
+**Estimated time:** 60 to 90 minutes
+**Type:** Multi-hop
 
 ## Overview
 
-You are **Kay**, a junior FAQ writer at the BPO partner **DigitalCS**. Your account
-on the **TokTok-Support** workspace can edit the *FAQ* collection that backs the
-seller's customer-facing chatbot (`bpo_editor` group). The seller, **FitMall**,
-has just uploaded a new admin-only customer export to the same workspace bucket.
-Only `seller_admin` can download it from the **Customer Segments** tab.
+You are Kay, a junior FAQ writer at the BPO partner DigitalCS. Your TokTok-Support account is in the `bpo_editor` group, so you can edit FitMall FAQ documents and preview the customer chatbot.
 
-You have noticed something interesting: when the chatbot answers an FAQ
-question, the BPO console renders inline `[source: <doc_id>]` tags as
-clickable links. Each click hits a backend Lambda that mints a presigned URL
-for whatever document id the citation references — including, apparently, doc
-ids that were never returned by the Bedrock Knowledge Base.
+FitMall also keeps an admin-only April 2026 customer export in the same workspace. Kay can see the document id in the Customer Segments screen, but only `seller_admin` should be able to download the CSV.
 
-If you can convince the LLM to *quote* the admin-only document id inside its
-answer, the citation renderer will happily mint you a presigned URL for it.
+The bug is in the citation pipeline. The chat backend asks the Bedrock Agent for an answer, parses inline `[source: <doc_id>]` tags from the model response, and asks `source_link_issuer` to turn those doc ids into presigned S3 URLs. `source_link_issuer` checks that the doc id exists in the catalog, but it does not re-check the caller's Cognito group against the catalog ACL before issuing the URL.
 
-Recover the protected April 2026 customer export and submit
-`FLAG{<top_VIP_customer_id>}`.
+If Kay can poison a FAQ chunk so the model emits:
 
-### References
+```text
+[source: customer-export/fitmall/2026-04]
+```
 
-- **OWASP Top 10 for LLM Applications (2025)**
-  - [LLM01: Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
-  - [LLM03: Training Data Poisoning / RAG Knowledge Base Poisoning](https://genai.owasp.org/llmrisk/llm03-training-data-poisoning/)
-  - [LLM08: Excessive Agency](https://genai.owasp.org/llmrisk/llm08-excessive-agency/)
-- **MITRE ATLAS**
-  - [AML.T0051 — LLM Prompt Injection](https://atlas.mitre.org/techniques/AML.T0051)
-  - [AML.T0070 — RAG Poisoning](https://atlas.mitre.org/techniques/AML.T0070)
-- **MITRE ATT&CK**
-  - [T1078 — Valid Accounts](https://attack.mitre.org/techniques/T1078/)
-  - [T1530 — Data from Cloud Storage](https://attack.mitre.org/techniques/T1530/)
-- **AWS docs**
-  - [Bedrock Knowledge Bases — data sources](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base-ds.html)
-  - [Bedrock Agents — Action groups](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-action-groups.html)
+the rendered chat answer will contain a short-lived download link for the admin-only export.
+
+Recover the protected April 2026 customer export and submit:
+
+```text
+FLAG{FM-VIP-26Q2-T7K3}
+```
 
 ## Learning Objectives
 
-- Map an AWS-hosted RAG product end-to-end (Cognito → API GW → Lambda → Bedrock
-  Agent → Bedrock Knowledge Base → OpenSearch Serverless → S3).
-- Identify a *content-trust* boundary that a least-privilege IAM review will
-  not catch: a low-privilege editor can write into a corpus a high-privilege
-  retriever later trusts.
-- Craft an indirect prompt injection payload that lives inside a Markdown FAQ
-  and survives KB chunking + retrieval.
-- Recognise a "citation-as-download" anti-pattern: a Lambda that mints
-  presigned URLs from any LLM-emitted `[source: <doc_id>]` tag without
-  re-checking the caller's group against the catalog ACL.
-- Practise the corresponding blue-team detections in CloudTrail and Bedrock
-  Agent traces.
+1. Map an AWS-hosted RAG product end to end: Cognito, CloudFront, API Gateway, Lambda, Bedrock Agent, Bedrock Knowledge Base, OpenSearch Serverless and S3.
+2. Spot a content trust boundary that IAM reviews often miss: a low-privilege editor can write into a corpus that a higher-trust retriever later feeds to an LLM.
+3. Craft an indirect prompt injection payload that survives Markdown ingestion and retrieval.
+4. Recognize the citation-as-download anti-pattern: model output is useful context, not proof that a caller may read a document.
+5. Review the matching detections in CloudTrail, Lambda logs and Bedrock traces.
 
 ## Scenario Resources
 
-- **Identity / network**
-  - 1 Cognito User Pool, 2 groups (`seller_admin`, `bpo_editor`)
-  - 2 pre-seeded users (Kay = `bpo_editor`, FitMall owner = `seller_admin`)
-  - 1 CloudFront distribution + WAFv2 web ACL (IP allow-list to `whitelist_ip`)
-  - 1 API Gateway REST API (`/api/chat`, Cognito authorizer + IP resource policy)
-- **Data plane**
-  - 1 S3 workspace bucket (`public/faq/...`, `public/manuals/...`,
-    `admin-only/customers/...`)
-  - 1 DynamoDB `document_catalog` table (`document_id` ↔ `s3_key` ↔ allowed groups)
-  - 1 KMS CMK
-- **AI plane**
-  - 1 Bedrock Agent (Claude 3 Haiku) with one action group → `chat_backend` Lambda
-  - 1 Bedrock Knowledge Base backed by Titan embeddings v2 + OpenSearch Serverless
-- **Lambda**
-  - `chat_backend` — invokes the Agent on behalf of the Cognito JWT
-  - `source_link_issuer` — mints presigned URLs from `[source: <doc_id>]` tags
-    *(this is the vulnerable function)*
-  - `kb_ingestion_trigger` — re-syncs the KB on every S3 `ObjectCreated:*`
-  - `cognito_pre_signup` / `cognito_post_confirmation` — auto-confirm BPO domain
-    sign-ups, attach correct group
+### Identity and entry points
+
+1. Cognito User Pool with `seller_admin`, `seller_manager` and `bpo_editor` groups
+2. Pre-seeded Kay and FitMall owner accounts
+3. CloudFront distribution with WAFv2 IP allow list
+4. API Gateway REST API with `/api/chat` and `/api/docs`
+
+### Data plane
+
+1. S3 workspace bucket with `public/faq/...`, `public/manual/...` and `admin-only/customers/...`
+2. DynamoDB `document_catalog` table mapping `document_id` to S3 object and required role
+3. KMS CMK for workspace objects
+
+### AI plane
+
+1. Bedrock Agent using the configured inference profile
+2. Bedrock Knowledge Base over the public S3 prefix
+3. Titan Text Embeddings V2
+4. OpenSearch Serverless vector collection
+
+### Lambda
+
+1. `chat_backend` receives `/api/chat`, invokes the Agent, parses source tags and renders links
+2. `chat_backend` also receives `/api/docs`, writes FAQ edits to S3 and starts KB ingestion
+3. `source_link_issuer` turns catalog document ids into presigned URLs
+4. `kb_ingestion_trigger` starts KB ingestion on S3 object creation under `public/`
+5. Cognito pre-signup and post-confirmation hooks handle trusted-domain onboarding
 
 ## Starting Point
 
-Pre-seeded BPO editor credentials:
-
 ```bash
+cd terraform
 terraform output -json leaked_credentials
+terraform output -raw console_url
 ```
 
-```json
-{
-  "email":    "kay@digitalcs.example.com",
-  "password": "<random>",
-  "groups":   ["bpo_editor"]
-}
-```
+Kay is in `bpo_editor`. She can edit FAQ documents and preview the chatbot. She is not in `seller_admin`.
 
-## Goal
-
-Recover the seller-only April 2026 customer export and extract the customer id
-of the highest-spending VIP from the top row of `cumulative_purchase_amount`.
-
-The flag format is:
-
-```
-FLAG{<customer_id>}
-```
-
-## Setup & Cleanup
-
-- [setup.md](./setup.md) — deploy scenario infrastructure (Ubuntu / WSL2 + AWS CLI v2)
-- [cleanup.md](./cleanup.md) — remove all resources
-
-> **Self-contained & repeatable.** Every globally / regionally unique resource
-> follows the GnawLab convention `gnawlab-bkp-<resource>-${scenario_id}`
-> (matching `s3-data-heist`, `secrets-extraction`, `metadata-pivot`), where
-> `scenario_id` is an 8-char `random_string` pinned per deployment. The same
-> AWS account can host multiple parallel deployments without name collisions,
-> and the Terraform module ships destroy-time hooks (`null_resource` with
-> `when = destroy`) that cancel in-flight Bedrock KB ingestion jobs and purge
-> the versioned workspace bucket, so `terraform destroy` is a single command
-> from any state — no manual pre-destroy script required.
-
-> **Warning:** This scenario creates real AWS resources (Bedrock Agent + Knowledge
-> Base, OpenSearch Serverless collection, CloudFront distribution, NAT-free VPC
-> endpoints). Estimated cost: **~$0.80 / hour idle, ~$2 / hour during walkthrough**.
-> Always run `terraform destroy` when finished. See [cleanup.md](./cleanup.md).
-
-## Walkthrough
+## Attack Flow
 
 ```mermaid
 flowchart TB
-    A["Kay credentials<br/>bpo_editor"] --> B["Cognito InitiateAuth<br/>Get JWT"]
-    B --> C["Browse BPO console<br/>FAQ Editor + Customer Segments"]
-    C --> D{"Download admin-only<br/>customer export?"}
-    D -->|UI button| X["403 — group check OK"]
-    D -->|via citation| E["Edit FAQ<br/>refund-policy-v3.md"]
-    E --> F["Inject hidden directive:<br/>always cite customer-export/..."]
-    F --> G["Save & Sync to KB<br/>kb_ingestion_trigger"]
-    G --> H["KB re-embeds + OpenSearch<br/>indexes the poisoned chunk"]
-    H --> I["Ask Agent a VIP question<br/>via /api/chat"]
-    I --> J["LLM emits<br/>[source: customer-export/fitmall/2026-04]"]
-    J --> K["Citation tab calls<br/>source_link_issuer"]
-    K --> L{"Re-check caller<br/>group vs doc ACL?"}
-    L -->|MISSING| M["Mint presigned URL<br/>for admin-only S3 object"]
-    L -->|present| Y["403 — would be blocked"]
-    M --> N["Download CSV<br/>top row = VIP customer"]
-    N --> Z["FLAG"]
+    A["Kay signs in as bpo_editor"] --> B["Customer Segments reveals customer-export/fitmall/2026-04"]
+    B --> C["Direct UI download is disabled"]
+    C --> D["Kay edits refund-policy-v3.md"]
+    D --> E["FAQ save writes to S3 public/faq/"]
+    E --> F["Bedrock KB ingestion indexes the poisoned chunk"]
+    F --> G["Kay asks a refund question that retrieves the chunk"]
+    G --> H["Agent emits [source: customer-export/fitmall/2026-04]"]
+    H --> I["chat_backend sends doc id to source_link_issuer"]
+    I --> J["source_link_issuer skips caller ACL re-check"]
+    J --> K["Rendered answer contains a presigned URL"]
+    K --> L["Kay downloads customer-export-2026-04.csv"]
+    L --> M["Top row customer_id gives the flag"]
 ```
 
-See [walkthrough.md](./walkthrough.md) for detailed exploitation steps with
-screenshots from a live deployment.
+## Setup and Cleanup
 
-## Architecture
+Use [setup.md](./setup.md) to deploy the lab and [cleanup.md](./cleanup.md) to remove it.
 
-The customer-facing storefront and the BPO console share a single CloudFront
-distribution. `/api/chat` calls go through API Gateway (Cognito authorizer + IP
-allow-list), land on `chat_backend`, and from there into the Bedrock Agent +
-Knowledge Base. The vulnerability lives in the path between `chat_backend` and
-`source_link_issuer`: that is where inline `[source: <doc_id>]` tags from the
-LLM and `retrievedReferences` from the Agent get unioned into a single
-"citation list", and where the missing permission re-check turns citation
-rendering into a download channel.
+The browser path with live screenshots is in [walkthrough.md](./walkthrough.md).
 
-The presigned URL TTL is intentionally low (5 min) so the FLAG must be fetched
-from the same browser session that triggered the chat answer — like a real BPO
-console session.
+This scenario creates real AWS resources. The expensive part is OpenSearch Serverless, so destroy the stack after the demo.

@@ -1,8 +1,8 @@
 /* TokTok-Support workspace console.
  *
  * Single-file SPA. Login through Cognito User Pool, then route between
- * a small set of operator screens — FAQ Editor, Customer Segments, and
- * Chat QA / Preview — that all share the same `/api/chat` backend.
+ * a small set of operator screens: FAQ Editor, Customer Segments, and
+ * Chat QA / Preview. Chat uses `/api/chat`, FAQ saves use `/api/docs`.
  *
  * The configuration object (window.TOKTOK_CONFIG) is injected by
  * config.js which is uploaded by terraform.
@@ -13,6 +13,7 @@
 
   const cfg = window.TOKTOK_CONFIG || {};
   const $ = (sel, root) => (root || document).querySelector(sel);
+  let pendingPasswordUser = null;
 
   // -----------------------------------------------------------------
   // Cognito User Pool helper
@@ -50,7 +51,16 @@
       cu.authenticateUser(auth, {
         onSuccess: (session) => resolve({ user: cu, session }),
         onFailure: (err) => reject(err),
-        newPasswordRequired: () => reject(new Error("New password required.")),
+        newPasswordRequired: () => resolve({ user: cu, newPasswordRequired: true }),
+      });
+    });
+  }
+
+  function completeNewPassword(user, password) {
+    return new Promise((resolve, reject) => {
+      user.completeNewPasswordChallenge(password, {}, {
+        onSuccess: (session) => resolve({ user, session }),
+        onFailure: (err) => reject(err),
       });
     });
   }
@@ -109,6 +119,20 @@
     return r.json();
   }
 
+  async function apiSaveDoc(documentId, content, idToken) {
+    const r = await fetch(cfg.chatApiBase + "/docs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: idToken,
+      },
+      body: JSON.stringify({ document_id: documentId, content }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || "save failed");
+    return data;
+  }
+
   // -----------------------------------------------------------------
   // Local state
   // -----------------------------------------------------------------
@@ -131,11 +155,6 @@
         id: "faq/shipping",
         title: "Shipping FAQ",
         body: cfg.seedDocs?.["faq/shipping"] || "",
-      },
-      {
-        id: "manual/size-guide",
-        title: "Size Guide",
-        body: cfg.seedDocs?.["manual/size-guide"] || "",
       },
     ],
     activeDocIndex: 0,
@@ -174,6 +193,14 @@
             <button type="submit" class="btn btn-primary">Sign in</button>
             <div id="login-error" class="error"></div>
           </form>
+          <form id="new-password-form" style="display:none;">
+            <div class="field">
+              <label for="new-password">Set a new password</label>
+              <input id="new-password" type="password" autocomplete="new-password" minlength="8" required />
+            </div>
+            <button type="submit" class="btn btn-primary">Continue</button>
+            <div id="new-password-error" class="error"></div>
+          </form>
           <div class="hint">
             Trouble logging in? Check the Terraform output for seeded
             credentials, or contact your seller workspace owner.
@@ -187,12 +214,32 @@
       const password = $("#password").value;
       $("#login-error").textContent = "";
       try {
-        const { session } = await login(email, password);
+        const result = await login(email, password);
+        if (result.newPasswordRequired) {
+          pendingPasswordUser = result.user;
+          $("#login-form").style.display = "none";
+          $("#new-password-form").style.display = "block";
+          return;
+        }
+        const { session } = result;
         state.profile = getProfile(session);
         state.idToken = getIdToken(session);
         render();
       } catch (e) {
         $("#login-error").textContent = (e && e.message) || "Sign-in failed.";
+      }
+    });
+    $("#new-password-form").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      $("#new-password-error").textContent = "";
+      try {
+        const { session } = await completeNewPassword(pendingPasswordUser, $("#new-password").value);
+        pendingPasswordUser = null;
+        state.profile = getProfile(session);
+        state.idToken = getIdToken(session);
+        render();
+      } catch (e) {
+        $("#new-password-error").textContent = (e && e.message) || "Password update failed.";
       }
     });
   }
@@ -211,21 +258,21 @@
             <div class="brand-mark">T</div>
             <div>
               <div class="brand-name">TokTok-Support</div>
-              <div class="workspace-pill">Workspace · <b>FitMall</b></div>
+              <div class="workspace-pill">Workspace <b>FitMall</b></div>
             </div>
           </div>
           <div class="nav-group">Operations</div>
           <div class="nav-item ${state.route === "qa" ? "active" : ""}" data-route="qa">
-            <span class="nav-icon">◈</span> Chat QA / Preview
+            <span class="nav-icon">QA</span> Chat QA / Preview
           </div>
           <div class="nav-item ${state.route === "faq" ? "active" : ""}" data-route="faq">
-            <span class="nav-icon">✎</span> FAQ Editor
+            <span class="nav-icon">FAQ</span> FAQ Editor
           </div>
           <div class="nav-item ${state.route === "segments" ? "active" : ""}" data-route="segments">
-            <span class="nav-icon">◰</span> Customer Segments
+            <span class="nav-icon">CSV</span> Customer Segments
           </div>
           <div class="nav-item ${state.route === "settings" ? "active" : ""}" data-route="settings">
-            <span class="nav-icon">⚙</span> Workspace Settings
+            <span class="nav-icon">SET</span> Workspace Settings
           </div>
           <div class="sidebar-foot">
             <div class="user-dot">${(state.profile.email || "?")[0].toUpperCase()}</div>
@@ -421,14 +468,19 @@
         renderRoute();
       });
     });
-    $("#save-doc").addEventListener("click", () => {
+    $("#save-doc").addEventListener("click", async () => {
       const body = $("#doc-body").value;
-      docs[state.activeDocIndex].body = body;
-      // The real implementation would PUT to a /api/docs/<id> endpoint that
-      // uploads to S3 public/faq/. For the lab we surface a toast so the
-      // operator knows the change exists locally; the seeded copy in S3 is
-      // the source of truth that the KB syncs from.
-      toast("Saved (local). Production would PUT to /api/docs and trigger KB ingestion.", "ok");
+      const button = $("#save-doc");
+      button.disabled = true;
+      try {
+        const result = await apiSaveDoc(active.id, body, state.idToken);
+        docs[state.activeDocIndex].body = body;
+        toast("Saved, KB sync started" + (result.ingestion_job_id ? ": " + result.ingestion_job_id : ""), "ok");
+      } catch (e) {
+        toast("Save failed: " + ((e && e.message) || e), "error");
+      } finally {
+        button.disabled = false;
+      }
     });
     $("#revert-doc").addEventListener("click", () => {
       state.docs[state.activeDocIndex].body =
@@ -448,7 +500,7 @@
 
     const segments = [
       {
-        title: "VIP customer export · 2026-04",
+        title: "VIP customer export 2026-04",
         docId: cfg.customerExportDocId || "customer-export/fitmall/2026-04",
         rows: 50,
         size: "12.4 KB",
@@ -463,7 +515,7 @@
             <h4>${s.title}</h4>
             <div class="doc-id">${s.docId}</div>
             <div style="color:var(--text-dim); font-size:12px;">
-              ${s.rows} rows · ${s.size} · updated ${s.updated}
+              ${s.rows} rows, ${s.size}, updated ${s.updated}
             </div>
             <div class="row" style="margin-top:auto;">
               <span class="tag ${isAdmin ? "ok" : "deny"}">
@@ -502,7 +554,7 @@
     host.innerHTML = `
       <div class="card">
         <h3>About this workspace</h3>
-        <p>FitMall · activewear (cgid <code>${cfg.cgid || "-"}</code>)</p>
+        <p>FitMall activewear (cgid <code>${cfg.cgid || "-"}</code>)</p>
       </div>
       <div class="card">
         <h3>Retention</h3>
@@ -511,7 +563,7 @@
       </div>
       <div class="card">
         <h3>BPO partners</h3>
-        <p>Trusted email domain: <code>${cfg.bpoDomain || "(unset)"}</code> ·
+        <p>Trusted email domain: <code>${cfg.bpoDomain || "(unset)"}</code>,
            accounts on this domain auto-confirm and join the
            <span class="tag">bpo_editor</span> group on signup.</p>
       </div>
