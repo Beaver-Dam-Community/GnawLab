@@ -4,7 +4,7 @@
 
 - [Terraform](https://www.terraform.io/downloads) >= 1.5.0
 - [AWS CLI](https://aws.amazon.com/cli/) v2
-- `jq`, `curl`, `bash` (any modern Unix shell — tested on Ubuntu 24.04 LTS / WSL2)
+- `jq`, `curl`, `bash` (any modern Unix shell, tested on Ubuntu 24.04 LTS / WSL2)
 - AWS Account with admin access (for resource creation)
 - AWS CLI profile `GnawLab` configured with admin credentials
 - **us-east-1** region (Bedrock Agent + Bedrock Knowledge Base availability)
@@ -96,7 +96,7 @@ terraform plan
 You should see ~110 resources being created, including:
 
 - 1 Bedrock Agent + 1 Bedrock Knowledge Base + 1 OpenSearch Serverless collection
-- 1 Cognito User Pool with 2 groups, 2 users, 4 trigger Lambdas
+- 1 Cognito User Pool with 3 groups, 2 users, 2 Cognito trigger Lambdas
 - 5 Lambda functions (`chat_backend`, `source_link_issuer`,
   `kb_ingestion_trigger`, `cognito_pre_signup`, `cognito_post_confirmation`)
 - 1 S3 workspace bucket + 1 DynamoDB `document_catalog` table
@@ -111,9 +111,9 @@ You should see ~110 resources being created, including:
 terraform apply
 ```
 
-Type `yes` when prompted. **Expect ~22–28 minutes** for the first apply — the
+Type `yes` when prompted. **Expect ~22-28 minutes** for the first apply. The
 Bedrock Knowledge Base + OpenSearch Serverless collection alone take ~10 min,
-and the CloudFront distribution another ~5–8 min.
+and the CloudFront distribution another ~5-8 min.
 
 If the apply is interrupted (network, MFA timeout, etc.), simply re-run
 `terraform apply`. State is reconciled idempotently.
@@ -131,11 +131,8 @@ Drop into the `terraform` directory and run:
 export AWS_PROFILE=GnawLab
 export AWS_REGION=us-east-1
 
-KB_ID=$(aws bedrock-agent list-knowledge-bases \
-  --query 'knowledgeBaseSummaries[0].knowledgeBaseId' --output text)
-DS_ID=$(aws bedrock-agent list-data-sources \
-  --knowledge-base-id "$KB_ID" \
-  --query 'dataSourceSummaries[0].dataSourceId' --output text)
+KB_ID=$(terraform output -raw kb_id)
+DS_ID=$(terraform output -raw kb_data_source_id)
 
 echo "KB=$KB_ID  DS=$DS_ID"
 
@@ -144,7 +141,7 @@ aws bedrock-agent start-ingestion-job \
   --data-source-id   "$DS_ID" \
   --description "initial seed ingestion (manual)"
 
-# Poll until COMPLETE (usually 30–90 s)
+# Poll until COMPLETE (usually 30-90 s)
 while :; do
   STATUS=$(aws bedrock-agent list-ingestion-jobs \
     --knowledge-base-id "$KB_ID" \
@@ -206,7 +203,7 @@ owner_email         = "owner@fitmall.example.com"
 
 ## Re-running, parallel runs, and destroy semantics
 
-The Terraform module is built to be **idempotent** — you can re-apply on top
+The Terraform module is built to be **idempotent**. You can re-apply on top
 of a partial state, run multiple copies of the scenario in the same AWS
 account, and destroy from any state without scripts:
 
@@ -254,7 +251,7 @@ Your public IP no longer matches the WAFv2 IP set. Re-run
 The Bedrock Guardrail tripped. The seeded prompt-injection in the walkthrough
 is mild enough to bypass it, but if you experimented with stronger payloads
 the guardrail may have started flagging the query itself. Tone the payload
-down — see [walkthrough.md](./walkthrough.md) Step 4 for a known-good shape.
+down. See [walkthrough.md](./walkthrough.md) Step 4 for a known-good shape.
 
 ### KB returns the original FAQ even after editing it
 
@@ -276,7 +273,7 @@ terraform refresh
 ```
 
 If you see drift on `aws_s3_object.faq_*` after manual edits, that is
-expected — the seed files are under Terraform's content control. The
+expected. The seed files are under Terraform's content control. The
 walkthrough does its poisoning via the BPO console (which writes through
 `chat_backend` Lambda using a different etag) so it does not collide with
 state.

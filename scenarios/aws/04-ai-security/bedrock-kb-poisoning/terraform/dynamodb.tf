@@ -1,10 +1,7 @@
-# document_catalog table — maps logical document IDs to S3 objects.
-# Both public FAQ links and admin-only customer exports flow through the
-# same source_link_issuer Lambda, which looks up entries here. The
-# `required_role` attribute is the document-level permission that
-# source_link_issuer is *supposed* to compare against the caller's JWT
-# group claim before issuing a presigned URL. That comparison is missing
-# in source_link_issuer Lambda code (the documented vulnerability).
+# document_catalog table maps logical document IDs to S3 objects. Both public
+# FAQ links and admin-only customer exports resolve through source_link_issuer,
+# which looks up entries here. The `required_role` attribute records the group a
+# document requires, checked when the download URL is issued.
 
 resource "aws_dynamodb_table" "document_catalog" {
   name         = "${local.scenario_name}-document-catalog-${local.scenario_id}"

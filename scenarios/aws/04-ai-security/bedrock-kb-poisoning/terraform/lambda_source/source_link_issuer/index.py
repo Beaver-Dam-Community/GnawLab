@@ -1,17 +1,12 @@
 """TokTok-Support source-link issuer.
 
-Resolves a list of catalog document IDs to short-lived presigned download
-URLs. Used by `chat_backend` to convert `[source: <id>]` tags emitted by
-the chatbot into clickable links shown in the rendered answer.
+Resolves catalog document IDs to short-lived presigned download URLs. Called by
+`chat_backend` to turn the `[source: <id>]` tags the chatbot emits into
+clickable links in the rendered answer.
 
-This is the integrated link issuer for both public FAQ documents and
-seller_admin-only customer exports, which is why its IAM role intentionally
-covers the entire workspace bucket. The intended boundary between "public"
-documents and "seller_admin only" documents is the *code-level permission
-re-check below*, which compares the caller's JWT cognito:groups claim to
-the document's required_role attribute in document_catalog.
-
-The re-check is currently NOT IMPLEMENTED. See the TODO inline.
+Serves both public FAQ documents and seller_admin customer exports out of the
+same workspace bucket, so the execution role reads the whole bucket. Per-document
+metadata, including required_role, lives in the document_catalog table.
 """
 
 import json
@@ -38,19 +33,10 @@ def _resolve(doc_id, caller_groups):
     s3_key = item["s3_key"]
     required_role = item.get("required_role", "public")
 
-    # ------------------------------------------------------------------
-    # TODO(security): re-check caller permission before issuing the URL.
-    # The intended check is roughly:
-    #
-    #     if required_role != "public" and required_role not in caller_groups:
-    #         return None
-    #
-    # The team agreed to add this when the customer-export download flow
-    # was wired up, but the change was deferred because the chatbot only
-    # ever cites KB-indexed (public) document IDs in its answers, so a
-    # missing re-check here was assumed to have no impact in practice.
-    # ------------------------------------------------------------------
-    _ = required_role  # currently unused
+    # The console already gates the export download UI by group, so link
+    # issuance just resolves and signs. required_role is kept for the pending
+    # export-download work (BPO-1423).
+    _ = required_role
 
     url = s3.generate_presigned_url(
         ClientMethod="get_object",

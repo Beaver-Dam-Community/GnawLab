@@ -15,7 +15,7 @@ output "scenario_info" {
 # Starting point: pre-seeded BPO editor (Kay)
 #---------------------------------------
 output "leaked_credentials" {
-  description = "Pre-seeded BPO editor account (Kay) — the scenario starting credential."
+  description = "Pre-seeded BPO editor account (Kay), the scenario starting credential."
   sensitive   = true
   value = {
     email    = aws_cognito_user.kay.username
@@ -25,7 +25,7 @@ output "leaked_credentials" {
 }
 
 output "owner_credentials" {
-  description = "Pre-seeded seller_admin account (FitMall owner) — for reference / lateral comparison only."
+  description = "Pre-seeded seller_admin account (FitMall owner), for reference / lateral comparison only."
   sensitive   = true
   value = {
     email    = aws_cognito_user.owner.username

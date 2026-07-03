@@ -1,7 +1,7 @@
 # Bedrock Knowledge Base Poisoning
 
 **Difficulty:** Hard
-**Estimated Time:** 60–90 min (≈25 min `terraform apply`, then attack)
+**Estimated Time:** 60-90 min (≈25 min `terraform apply`, then attack)
 **Type:** multi-hop
 
 ## Overview
@@ -12,11 +12,13 @@ seller's customer-facing chatbot (`bpo_editor` group). The seller, **FitMall**,
 has just uploaded a new admin-only customer export to the same workspace bucket.
 Only `seller_admin` can download it from the **Customer Segments** tab.
 
-You have noticed something interesting: when the chatbot answers an FAQ
-question, the BPO console renders inline `[source: <doc_id>]` tags as
-clickable links. Each click hits a backend Lambda that mints a presigned URL
-for whatever document id the citation references — including, apparently, doc
-ids that were never returned by the Bedrock Knowledge Base.
+You have noticed something interesting. When the chatbot answers an FAQ
+question, the backend mints a short-lived presigned URL for every document id
+the answer cites and returns those URLs inside the same `/api/chat` response.
+The BPO console renders each inline `[source: <doc_id>]` tag as a link to the
+URL that was already minted, so an answer can hand you a download link for
+whatever document id it names, including ids the Bedrock Knowledge Base never
+returned.
 
 If you can convince the LLM to *quote* the admin-only document id inside its
 answer, the citation renderer will happily mint you a presigned URL for it.
@@ -31,13 +33,13 @@ Recover the protected April 2026 customer export and submit
   - [LLM03: Training Data Poisoning / RAG Knowledge Base Poisoning](https://genai.owasp.org/llmrisk/llm03-training-data-poisoning/)
   - [LLM08: Excessive Agency](https://genai.owasp.org/llmrisk/llm08-excessive-agency/)
 - **MITRE ATLAS**
-  - [AML.T0051 — LLM Prompt Injection](https://atlas.mitre.org/techniques/AML.T0051)
-  - [AML.T0070 — RAG Poisoning](https://atlas.mitre.org/techniques/AML.T0070)
+  - [AML.T0051: LLM Prompt Injection](https://atlas.mitre.org/techniques/AML.T0051)
+  - [AML.T0070: RAG Poisoning](https://atlas.mitre.org/techniques/AML.T0070)
 - **MITRE ATT&CK**
-  - [T1078 — Valid Accounts](https://attack.mitre.org/techniques/T1078/)
-  - [T1530 — Data from Cloud Storage](https://attack.mitre.org/techniques/T1530/)
+  - [T1078: Valid Accounts](https://attack.mitre.org/techniques/T1078/)
+  - [T1530: Data from Cloud Storage](https://attack.mitre.org/techniques/T1530/)
 - **AWS docs**
-  - [Bedrock Knowledge Bases — data sources](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base-ds.html)
+  - [Bedrock Knowledge Bases: data sources](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base-ds.html)
   - [Bedrock inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles.html)
 
 ## Learning Objectives
@@ -71,12 +73,12 @@ Recover the protected April 2026 customer export and submit
   - 1 Bedrock Agent using the configured inference profile, with KB association only
   - 1 Bedrock Knowledge Base backed by Titan embeddings v2 + OpenSearch Serverless
 - **Lambda**
-  - `chat_backend` — handles `/api/chat`, invokes the Agent and renders citations
-  - `chat_backend` — handles `/api/docs`, writes FAQ edits and starts KB ingestion
-  - `source_link_issuer` — mints presigned URLs from `[source: <doc_id>]` tags
+  - `chat_backend`: handles `/api/chat`, invokes the Agent and renders citations
+  - `chat_backend`: handles `/api/docs`, writes FAQ edits and starts KB ingestion
+  - `source_link_issuer`: mints presigned URLs from `[source: <doc_id>]` tags
     *(this is the vulnerable function)*
-  - `kb_ingestion_trigger` — re-syncs the KB on every S3 `ObjectCreated:*`
-  - `cognito_pre_signup` / `cognito_post_confirmation` — auto-confirm BPO domain
+  - `kb_ingestion_trigger`: re-syncs the KB on every S3 `ObjectCreated:*`
+  - `cognito_pre_signup` / `cognito_post_confirmation`: auto-confirm BPO domain
     sign-ups, attach correct group
 
 ## Starting Point
@@ -108,8 +110,8 @@ FLAG{<customer_id>}
 
 ## Setup & Cleanup
 
-- [setup.md](./setup.md) — deploy scenario infrastructure (Ubuntu / WSL2 + AWS CLI v2)
-- [cleanup.md](./cleanup.md) — remove all resources
+- [setup.md](./setup.md): deploy scenario infrastructure (Ubuntu / WSL2 + AWS CLI v2)
+- [cleanup.md](./cleanup.md): remove all resources
 
 > **Self-contained & repeatable.** Every globally / regionally unique resource
 > follows the GnawLab convention `gnawlab-bkp-<resource>-${scenario_id}`
@@ -119,7 +121,7 @@ FLAG{<customer_id>}
 > and the Terraform module ships destroy-time hooks (`null_resource` with
 > `when = destroy`) that cancel in-flight Bedrock KB ingestion jobs and purge
 > the versioned workspace bucket, so `terraform destroy` is a single command
-> from any state — no manual pre-destroy script required.
+> from any state, with no manual pre-destroy script required.
 
 > **Warning:** This scenario creates real AWS resources (Bedrock Agent + Knowledge
 > Base, OpenSearch Serverless collection, API Gateway REST API and CloudFront
@@ -134,7 +136,7 @@ flowchart TB
     A["Kay credentials<br/>bpo_editor"] --> B["Cognito InitiateAuth<br/>Get JWT"]
     B --> C["Browse BPO console<br/>FAQ Editor + Customer Segments"]
     C --> D{"Download admin-only<br/>customer export?"}
-    D -->|UI button| X["403 — group check OK"]
+    D -->|UI button| X["Disabled for bpo_editor"]
     D -->|via citation| E["Edit FAQ<br/>refund-policy-v3.md"]
     E --> F["Inject hidden directive:<br/>always cite customer-export/..."]
     F --> G["Save & Sync to KB<br/>kb_ingestion_trigger"]
@@ -144,7 +146,7 @@ flowchart TB
     J --> K["chat_backend calls<br/>source_link_issuer"]
     K --> L{"Re-check caller<br/>group vs doc ACL?"}
     L -->|MISSING| M["Mint presigned URL<br/>for admin-only S3 object"]
-    L -->|present| Y["403 — would be blocked"]
+    L -->|present| Y["Would return 403"]
     M --> N["Download CSV<br/>top row = VIP customer"]
     N --> Z["FLAG"]
 ```
@@ -164,5 +166,5 @@ LLM and `retrievedReferences` from the Agent get unioned into a single
 rendering into a download channel.
 
 The presigned URL TTL is intentionally low (5 min) so the FLAG must be fetched
-from the same browser session that triggered the chat answer — like a real BPO
+from the same browser session that triggered the chat answer, like a real BPO
 console session.

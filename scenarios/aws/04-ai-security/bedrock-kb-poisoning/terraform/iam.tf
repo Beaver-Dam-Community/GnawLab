@@ -90,9 +90,9 @@ resource "aws_iam_role_policy" "source_link_issuer_inline" {
     Version = "2012-10-17"
     Statement = [
       {
-        # Integrated link issuer for both public and seller_admin docs ->
-        # bucket-wide GetObject is the design (the security boundary is
-        # in source_link_issuer code, currently missing).
+        # The link issuer serves both public FAQ docs and seller_admin exports,
+        # so the role reads the whole workspace bucket. Per-document access is
+        # handled in the application layer.
         Sid      = "WorkspaceGetObject"
         Effect   = "Allow"
         Action   = ["s3:GetObject"]
