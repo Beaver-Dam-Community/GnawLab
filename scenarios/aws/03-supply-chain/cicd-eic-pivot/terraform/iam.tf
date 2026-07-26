@@ -26,9 +26,19 @@ resource "aws_iam_role_policy" "gitlab_ssm_policy" {
         Effect   = "Allow"
         Action   = ["ssm:PutParameter"]
         Resource = aws_ssm_parameter.atlantis_gitlab_token.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.setup_files.arn}/infra-repo/*"
       }
     ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "gitlab_ssm_core" {
+  role       = aws_iam_role.gitlab_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
 resource "aws_iam_instance_profile" "gitlab_profile" {
@@ -81,6 +91,15 @@ resource "aws_iam_role_policy" "atlantis_policy" {
         Effect   = "Allow"
         Action   = ["ssm:GetParameter"]
         Resource = aws_ssm_parameter.atlantis_gitlab_token.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:ListRolePolicies",
+          "iam:GetRolePolicy",
+          "iam:ListAttachedRolePolicies"
+        ]
+        Resource = aws_iam_role.atlantis_role.arn
       }
     ]
   })
@@ -109,6 +128,6 @@ resource "aws_iam_role" "target_role" {
 }
 
 resource "aws_iam_instance_profile" "target_profile" {
-  name = "${local.scenario_name}-target-profile-${local.scenario_id}"
+  name = "${local.scenario_name}-app-prod-profile-${local.scenario_id}"
   role = aws_iam_role.target_role.name
 }

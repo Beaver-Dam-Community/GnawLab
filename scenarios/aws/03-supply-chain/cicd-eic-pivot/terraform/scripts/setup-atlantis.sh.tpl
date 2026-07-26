@@ -67,8 +67,8 @@ fi
 cat > /etc/atlantis-repos.yaml << 'REPOCONF'
 repos:
 - id: /.*/
-  allowed_overrides: [apply_requirements, workflow]
-  allow_custom_workflows: true
+  allowed_overrides: []
+  allow_custom_workflows: false
 REPOCONF
 
 cat > /etc/systemd/system/atlantis.service << UNIT
@@ -80,10 +80,10 @@ After=network.target
 User=atlantis
 ExecStart=/usr/local/bin/atlantis server \
   --gitlab-hostname=http://$GITLAB_PRIVATE_IP \
-  --gitlab-user=000_ops \
+  --gitlab-user=platform \
   --gitlab-token=$GITLAB_TOKEN \
   --gitlab-webhook-secret=$WEBHOOK_SECRET \
-  --repo-allowlist=* \
+  --repo-allowlist=$GITLAB_PRIVATE_IP/platform/infra-repo \
   --repo-config=/etc/atlantis-repos.yaml \
   --default-tf-version=1.5.7 \
   --port=4141

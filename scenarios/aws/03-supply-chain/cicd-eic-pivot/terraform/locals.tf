@@ -6,7 +6,7 @@ resource "random_string" "scenario_id" {
 
 locals {
   scenario_id   = random_string.scenario_id.result
-  scenario_name = "gnawlab-cicd-eic"
+  scenario_name = "cicd-eic-pivot"
 
   # Resource naming
   vpc_name            = "${local.scenario_name}-vpc-${local.scenario_id}"
@@ -17,15 +17,16 @@ locals {
   private_rt_name     = "${local.scenario_name}-private-rt-${local.scenario_id}"
   gitlab_sg_name      = "${local.scenario_name}-gitlab-sg-${local.scenario_id}"
   bastion_sg_name     = "${local.scenario_name}-bastion-sg-${local.scenario_id}"
-  target_sg_name      = "${local.scenario_name}-target-sg-${local.scenario_id}"
+  atlantis_sg_name    = "${local.scenario_name}-atlantis-sg-${local.scenario_id}"
+  target_sg_name      = "${local.scenario_name}-app-prod-sg-${local.scenario_id}"
   gitlab_name         = "${local.scenario_name}-gitlab-server-${local.scenario_id}"
   atlantis_name       = "${local.scenario_name}-atlantis-runner-${local.scenario_id}"
   bastion_name        = "${local.scenario_name}-bastion-host-${local.scenario_id}"
-  target_name         = "${local.scenario_name}-target-server-${local.scenario_id}"
-  target_key_name     = "${local.scenario_name}-target-key-${local.scenario_id}"
+  target_name         = "${local.scenario_name}-app-prod-${local.scenario_id}"
+  target_key_name     = "${local.scenario_name}-app-prod-key-${local.scenario_id}"
   gitlab_role_name    = "${local.scenario_name}-gitlab-role-${local.scenario_id}"
   atlantis_role_name  = "${local.scenario_name}-atlantis-role-${local.scenario_id}"
-  target_role_name    = "${local.scenario_name}-target-role-${local.scenario_id}"
+  target_role_name    = "${local.scenario_name}-app-prod-role-${local.scenario_id}"
   ssm_param_name      = "/${local.scenario_name}-${local.scenario_id}/atlantis-gitlab-token"
 
   # Fixed private IPs (eliminate circular dependencies in user_data)

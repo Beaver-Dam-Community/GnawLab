@@ -1,26 +1,28 @@
 resource "local_file" "gitlab_credentials" {
-  content         = "URL: http://${aws_instance.gitlab_server.public_ip}\nUsername: 000_ops\nPassword: BeaverPassword123!\n"
+  content         = "URL: http://${aws_instance.gitlab_server.public_ip}\nUsername: platform\nPassword: BvrOps@2024\n"
   filename        = "${path.module}/../assets/gitlab_credentials.txt"
   file_permission = "0644"
 }
 
 output "gitlab_server_url" {
   value       = "http://${aws_instance.gitlab_server.public_ip}"
-  description = "URL of the GitLab server (starting point — may take 15-20 min to fully initialize)"
+  description = "GitLab URL -- allow 15-20 min to fully initialize after apply"
 }
 
 output "instructions" {
   value = <<EOF
-=== gnawlab-cicd-eic ===
-NOTE: GitLab takes 15-20 minutes to fully initialize after terraform apply.
-Wait until http://${aws_instance.gitlab_server.public_ip} is accessible before starting.
 
-Starting point:
-  URL:      http://${aws_instance.gitlab_server.public_ip}
-  Username: 000_ops
-  Password: BeaverPassword123!
-  (also saved to assets/gitlab_credentials.txt)
+=== cicd-eic-pivot ===
 
-Goal: retrieve /home/ubuntu/flag.txt from the target server.
+GitLab takes 15-20 min to initialize. Check /-/health before starting.
+
+  URL       http://${aws_instance.gitlab_server.public_ip}
+  Username  platform
+  Password  BvrOps@2024
+
+  (saved to assets/gitlab_credentials.txt)
+
+Objective: read /home/ubuntu/flag.txt from the production instance.
+
 EOF
 }

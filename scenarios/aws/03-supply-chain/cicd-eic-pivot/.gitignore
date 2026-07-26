@@ -1,0 +1,8 @@
+assets/gitlab_credentials.txt
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfvars
+/tmp/eic-key
+/tmp/eic-key.pub

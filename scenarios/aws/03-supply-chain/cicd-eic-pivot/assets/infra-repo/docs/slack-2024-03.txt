@@ -1,0 +1,57 @@
+#platform-infra -- March 2024 export
+Exported by: jake.park | 2024-04-01
+
+-------------------------------------------------------------------------------
+[2024-03-01 10:23] jake.park
+  hey quick q -- can we just enable autoplan on infra-repo? tired of typing
+  "atlantis plan" every MR
+
+[2024-03-01 10:31] sarah.kim
+  yeah should be fine. private repo, only our team has write access
+
+[2024-03-01 10:32] jake.park
+  ok enabling it now
+
+[2024-03-01 11:45] sarah.kim
+  wait. dumb question but -- if someone with write access pushes a .tf that
+  has a local-exec, that runs on the runner right?
+
+[2024-03-01 11:52] jake.park
+  ...yeah technically it would
+
+[2024-03-01 11:53] jake.park
+  but that's our own devs. who's going to do that
+
+[2024-03-01 12:01] sarah.kim
+  lol ok fair. but let's actually scope the runner IAM before we forget.
+  logging PLAT-1203
+
+[2024-03-01 12:03] jake.park
+  +1. Q2 work
+
+[2024-03-15 16:42] sec-eng-02
+  heads up -- filed a security finding on the autoplan setup. check JIRA and
+  your inbox. also the SendSSHPublicKey scope on the runner role is pretty
+  broad, it can reach any instance in the account
+
+[2024-03-15 16:58] jake.park
+  saw it, thanks. we know about both. PLAT-1203 tracks it
+
+[2024-03-15 17:04] sarah.kim
+  the scope was intentional -- instances get replaced during maintenance and we
+  didn't want to chase ARNs every time. it's in the ADR
+
+[2024-03-15 17:05] sec-eng-02
+  ok just making sure it's documented. PLAT-1203 needs to actually ship though
+
+[2024-03-15 17:06] jake.park
+  agreed. Q2 for sure. post-launch crunch is over
+
+[2024-04-02 09:15] jake.park
+  quick heads up -- PLAT-1203 got bumped to Q3. SOC 2 audit prep ate Q2
+
+[2024-04-02 09:23] sarah.kim
+  :heavy-check-mark:
+
+-------------------------------------------------------------------------------
+end of export

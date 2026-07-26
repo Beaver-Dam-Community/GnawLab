@@ -1,0 +1,26 @@
+BREACH INTEL -- RESTRICTED
+Source: credmarket post, 2026-07-14 02:31 UTC
+Confidence: HIGH (credentials verified by seller)
+
+Target company:   BeaverOps Corp
+Industry:         B2B SaaS
+Infrastructure:   AWS (us-east-1), self-hosted GitLab CE
+
+Exfil method:     Malicious npm package "dev-utils-formatter" v2.3.1
+                  Installed silently via internal developer toolchain
+                  on 2026-07-12. Keylogger component harvested
+                  GitLab credentials from affected workstations.
+
+Account obtained: platform (developer service account)
+                  Write access to infra-repo confirmed.
+                  No MFA on account.
+
+Seller's note:
+  "They run Atlantis for Terraform. Has an infra-repo.
+   Something with autoplan. Didn't dig further -- selling as-is."
+
+Estimated active window:
+  Developer may notice unusual activity within 24-48h.
+  Recommend acting before next business day.
+
+Credentials: see gitlab_credentials.txt
