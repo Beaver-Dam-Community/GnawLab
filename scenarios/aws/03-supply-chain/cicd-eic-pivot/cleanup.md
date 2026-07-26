@@ -43,18 +43,18 @@ If Terraform destroy fails, manually delete these resources:
 
 2. **Security Groups**
    - Go to [EC2 Console → Security Groups](https://console.aws.amazon.com/ec2/home#SecurityGroups)
-   - Search for groups containing `gnawlab-cicd-eic`
+   - Search for groups containing `cicd-eic-pivot`
    - Delete all associated security groups (terminate instances first to release dependencies)
 
 3. **VPC**
    - Go to [VPC Console](https://console.aws.amazon.com/vpc/)
-   - Search for VPC containing `gnawlab-cicd-eic`
+   - Search for VPC containing `cicd-eic-pivot`
    - Delete subnets, route tables, and internet gateway
    - Delete the VPC
 
 4. **IAM Roles**
    - Go to [IAM Console → Roles](https://console.aws.amazon.com/iam/home#/roles)
-   - Search for roles containing `gnawlab-cicd-eic`
+   - Search for roles containing `cicd-eic-pivot`
    - Detach and delete inline policies first
    - Delete the roles and instance profiles
 
@@ -80,7 +80,7 @@ INSTANCE_IDS=$(aws ec2 describe-instances \
 aws ec2 terminate-instances --instance-ids $INSTANCE_IDS
 
 # Delete SSM parameter
-aws ssm delete-parameter --name "/gnawlab-cicd-eic-<scenario_id>/atlantis-gitlab-token"
+aws ssm delete-parameter --name "/cicd-eic-pivot-<scenario_id>/atlantis-gitlab-token"
 ```
 
 ## Remove Local Files

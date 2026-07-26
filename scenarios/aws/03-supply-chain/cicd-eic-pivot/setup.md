@@ -75,7 +75,7 @@ Type `yes` when prompted.
 
 ## Step 6: Wait for GitLab to Initialize
 
-GitLab CE is the bottleneck. The instance runs a setup script on first boot that installs and configures GitLab, creates the `000_ops` account, seeds `infra-repo`, and registers the Atlantis webhook. This takes approximately 15–20 minutes.
+GitLab CE is the bottleneck. The instance runs a setup script on first boot that installs and configures GitLab, creates the `platform` account, seeds `infra-repo`, and registers the Atlantis webhook. This takes approximately 15–20 minutes.
 
 You can monitor progress via SSM Session Manager:
 
@@ -100,7 +100,7 @@ Example output:
 Once GitLab is accessible, confirm the following before starting:
 
 1. Open `http://<GITLAB_IP>` in your browser — the GitLab login page should appear
-2. Log in as `000_ops` with password `BeaverPassword123!`
+2. Log in as `platform` with password `BvrOps@2024`
 3. Confirm `infra-repo` exists and contains `main.tf`, `variables.tf`, and `atlantis.yaml`
 4. Confirm the Atlantis webhook is registered: navigate to `infra-repo → Settings → Webhooks` and verify a webhook pointing to the Atlantis server is present
 
