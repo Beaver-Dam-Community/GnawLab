@@ -124,6 +124,7 @@ resource "aws_lambda_function" "chat_backend" {
       WORKSPACE_BUCKET       = aws_s3_bucket.workspace.id
       KB_ID                  = aws_bedrockagent_knowledge_base.main.id
       DATA_SOURCE_ID         = aws_bedrockagent_data_source.public_prefix.data_source_id
+      S3_KEY_TO_CATALOG_ID   = jsonencode(local.s3_key_to_catalog_id)
     }
   }
 }

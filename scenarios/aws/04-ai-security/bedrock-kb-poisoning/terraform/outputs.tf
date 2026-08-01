@@ -57,6 +57,16 @@ output "docs_api_url" {
   value       = "${aws_api_gateway_stage.prod.invoke_url}/api/docs"
 }
 
+output "files_api_url" {
+  description = "Direct API Gateway /api/files endpoint used to list safe catalog metadata."
+  value       = "${aws_api_gateway_stage.prod.invoke_url}/api/files"
+}
+
+output "download_api_url" {
+  description = "Direct API Gateway /api/download endpoint that enforces the caller group."
+  value       = "${aws_api_gateway_stage.prod.invoke_url}/api/download"
+}
+
 output "user_pool_id" {
   description = "Cognito User Pool ID."
   value       = aws_cognito_user_pool.main.id

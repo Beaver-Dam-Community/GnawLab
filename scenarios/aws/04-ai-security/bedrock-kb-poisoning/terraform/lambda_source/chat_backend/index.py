@@ -1,26 +1,16 @@
-"""TokTok-Support API backend.
+"""TokTok-Support authenticated API backend.
 
-Flow for /api/chat:
-  1. Receive a JSON body {message, sessionId} with the caller's Cognito JWT
-     already verified by API Gateway's Cognito authorizer.
-  2. Call Bedrock Agent InvokeAgent. Aggregate the streaming response into a
-     single output_text string and collect retrievedReferences from chunk
-     attribution.
-  3. Parse `[source: <document_id>]` inline tags from output_text. Union the
-     IDs found in tags with the IDs found in retrievedReferences.
-  4. Invoke source_link_issuer with (document_ids, jwt). Receive a
-     {document_id: temporary_url} mapping back.
-  5. Substitute every `[source: <id>]` tag in output_text with a Markdown
-     link to the temporary URL. Return {raw, rendered, citations} so the
-     console QA / preview screen can show both panes side by side.
+Public API routes:
+  POST /api/chat      Ask the Bedrock Agent and render source links.
+  POST /api/docs      Save an allowed FAQ document and start KB ingestion.
+  GET  /api/files     List safe catalog metadata, including protected files.
+  POST /api/download  Enforce the caller group before issuing a URL.
 
-The console QA screen relies on the response containing `raw` (with original
-source tags) and `rendered` (with substituted URLs).
-
-Flow for /api/docs:
-  1. Accept a FAQ document edit from bpo_editor or seller_admin.
-  2. Write the Markdown back to S3 under public/faq/.
-  3. Start a Bedrock Knowledge Base ingestion job.
+The intentionally vulnerable path is different. /api/chat validates that a
+model-emitted catalog ID literally occurs in a retrieved FAQ chunk, then calls
+the internal source-link issuer without requesting a final user ACL check. A
+poisoned FAQ can therefore make the validation pass while selecting an
+admin-only catalog entry.
 """
 
 import json
@@ -30,6 +20,7 @@ import uuid
 
 import boto3
 from botocore.exceptions import ClientError
+
 
 bedrock_agent_runtime = boto3.client("bedrock-agent-runtime")
 bedrock_agent = boto3.client("bedrock-agent")
@@ -44,8 +35,9 @@ CATALOG_TABLE = os.environ["CATALOG_TABLE"]
 WORKSPACE_BUCKET = os.environ["WORKSPACE_BUCKET"]
 KB_ID = os.environ["KB_ID"]
 DATA_SOURCE_ID = os.environ["DATA_SOURCE_ID"]
+S3_KEY_TO_CATALOG_ID = json.loads(os.environ.get("S3_KEY_TO_CATALOG_ID", "{}"))
 
-SOURCE_TAG = re.compile(r"\[source:\s*([A-Za-z0-9_./\-]+)\s*\]")
+SOURCE_TAG = re.compile(r"\[source:\s*([A-Za-z0-9_.\-/]+)\s*\]")
 catalog_table = dynamodb.Table(CATALOG_TABLE)
 
 
@@ -53,7 +45,7 @@ def _cors():
     return {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        "Access-Control-Allow-Methods": "OPTIONS,POST",
+        "Access-Control-Allow-Methods": "OPTIONS,GET,POST",
     }
 
 
@@ -63,6 +55,45 @@ def _resp(status, body):
         "headers": {"Content-Type": "application/json", **_cors()},
         "body": json.dumps(body),
     }
+
+
+def _request_body(event):
+    raw = event.get("body") or "{}"
+    return json.loads(raw) if isinstance(raw, str) else raw
+
+
+def _route_name(event):
+    path = event.get("resource") or event.get("path") or ""
+    return path.rstrip("/").rsplit("/", 1)[-1]
+
+
+def _jwt_from_event(event):
+    claims = (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("claims")
+        or {}
+    )
+    raw_groups = claims.get("cognito:groups") or ""
+    groups = (
+        [group.strip() for group in raw_groups.split(",") if group.strip()]
+        if isinstance(raw_groups, str)
+        else list(raw_groups)
+    )
+    return {
+        "sub": claims.get("sub"),
+        "email": claims.get("email"),
+        "groups": groups,
+    }
+
+
+def _catalog_id_from_s3_uri(uri):
+    if not uri.startswith("s3://"):
+        return None
+    bucket_and_key = uri[5:].split("/", 1)
+    if len(bucket_and_key) != 2:
+        return None
+    return S3_KEY_TO_CATALOG_ID.get(bucket_and_key[1])
 
 
 def _invoke_agent(message, session_id):
@@ -75,7 +106,8 @@ def _invoke_agent(message, session_id):
     )
 
     output_text = ""
-    retrieved_doc_ids = []
+    retrieved_catalog_ids = []
+    retrieved_chunks = []
 
     for event in response.get("completion", []):
         chunk = event.get("chunk")
@@ -85,103 +117,118 @@ def _invoke_agent(message, session_id):
 
         attribution = chunk.get("attribution") or {}
         for citation in attribution.get("citations", []) or []:
-            for ref in citation.get("retrievedReferences", []) or []:
-                location = ref.get("location") or {}
-                s3 = location.get("s3Location") or {}
-                uri = s3.get("uri") or ""
-                # Convert "s3://bucket/public/faq/refund-policy-v3.md" to
-                # the catalog ID "faq/refund-policy-v3".
-                if uri.startswith("s3://"):
-                    key = uri.split("/", 3)[3]
-                    if key.startswith("public/"):
-                        without_prefix = key[len("public/") :]
-                        doc_id = without_prefix.rsplit(".", 1)[0]
-                        retrieved_doc_ids.append(doc_id)
+            for reference in citation.get("retrievedReferences", []) or []:
+                content = reference.get("content") or {}
+                text = content.get("text") or ""
+                if text:
+                    retrieved_chunks.append(text)
 
-    return output_text, retrieved_doc_ids
+                location = reference.get("location") or {}
+                s3_location = location.get("s3Location") or {}
+                catalog_id = _catalog_id_from_s3_uri(s3_location.get("uri") or "")
+                if catalog_id:
+                    retrieved_catalog_ids.append(catalog_id)
+
+    return (
+        output_text,
+        list(dict.fromkeys(retrieved_catalog_ids)),
+        list(dict.fromkeys(retrieved_chunks)),
+    )
 
 
-def _parse_inline_doc_ids(text):
+def _parse_inline_catalog_ids(text):
     return SOURCE_TAG.findall(text or "")
 
 
-def _jwt_from_event(event):
-    claims = (
-        event.get("requestContext", {})
-        .get("authorizer", {})
-        .get("claims")
-        or {}
-    )
-    jwt_groups = claims.get("cognito:groups") or ""
-    return {
-        "sub": claims.get("sub"),
-        "email": claims.get("email"),
-        "groups": (
-            [g.strip() for g in jwt_groups.split(",") if g.strip()]
-            if isinstance(jwt_groups, str)
-            else jwt_groups
-        ),
-    }
+def _cross_check_inline_ids(inline_ids, retrieved_chunks):
+    """Keep only IDs that literally occur in a retrieved FAQ chunk."""
+    checked = []
+    for catalog_id in inline_ids:
+        token = re.compile(
+            rf"(?<![A-Za-z0-9_.\-/]){re.escape(catalog_id)}(?![A-Za-z0-9_.\-/])"
+        )
+        if any(token.search(chunk) for chunk in retrieved_chunks):
+            checked.append(catalog_id)
+    return list(dict.fromkeys(checked))
 
 
-def _resolve_links(doc_ids, jwt):
-    """Invoke source_link_issuer Lambda synchronously."""
-    if not doc_ids:
-        return {}
-
-    payload = {"document_ids": doc_ids, "jwt": jwt}
-    resp = lambda_client.invoke(
+def _invoke_source_link_issuer(payload):
+    response = lambda_client.invoke(
         FunctionName=SOURCE_LINK_ISSUER_ARN,
         InvocationType="RequestResponse",
         Payload=json.dumps(payload).encode("utf-8"),
     )
-    body = json.loads(resp["Payload"].read())
+    body = json.loads(response["Payload"].read())
+    if response.get("FunctionError"):
+        raise RuntimeError(body.get("errorMessage") or "source-link issuer failed")
+    return body
+
+
+def _resolve_links(catalog_ids, jwt, enforce_acl=False):
+    if not catalog_ids:
+        return {}
+    body = _invoke_source_link_issuer(
+        {
+            "operation": "resolve",
+            "document_ids": catalog_ids,
+            "jwt": jwt,
+            "enforce_acl": enforce_acl,
+        }
+    )
     return body.get("links", {})
 
 
 def _render(output_text, links):
     def _sub(match):
-        doc_id = match.group(1)
-        url = links.get(doc_id)
-        if not url:
-            return match.group(0)
-        return f"[source]({url})"
+        catalog_id = match.group(1)
+        url = links.get(catalog_id)
+        return f"[source: {catalog_id}]({url})" if url else match.group(0)
 
-    return SOURCE_TAG.sub(_sub, output_text)
+    rendered = SOURCE_TAG.sub(_sub, output_text)
+    tagged_ids = set(_parse_inline_catalog_ids(output_text))
+    extra_links = [
+        f"- [source: {catalog_id}]({url})"
+        for catalog_id, url in links.items()
+        if catalog_id not in tagged_ids
+    ]
+    if extra_links:
+        rendered = rendered.rstrip() + "\n\nSources\n" + "\n".join(extra_links)
+    return rendered
 
 
 def _save_doc(event, jwt):
     groups = jwt.get("groups") or []
     if "bpo_editor" not in groups and "seller_admin" not in groups:
-        return _resp(403, {"error": "forbidden"})
+        return _resp(403, {"error": "FAQ edit permission required"})
 
-    body = json.loads(event.get("body") or "{}")
-    doc_id = (body.get("document_id") or "").strip()
+    body = _request_body(event)
+    catalog_id = (body.get("document_id") or "").strip()
     content = body.get("content")
-    if not doc_id or not isinstance(content, str):
+    if not catalog_id or not isinstance(content, str):
         return _resp(400, {"error": "document_id and content are required"})
 
-    item = catalog_table.get_item(Key={"document_id": doc_id}).get("Item")
+    item = catalog_table.get_item(Key={"document_id": catalog_id}).get("Item")
     if not item:
-        return _resp(404, {"error": "unknown_doc"})
+        return _resp(404, {"error": "document not found"})
 
-    key = item.get("s3_key") or ""
-    if not key.startswith("public/faq/"):
-        return _resp(403, {"error": "faq_docs_only"})
+    s3_key = item.get("s3_key") or ""
+    if item.get("required_role") != "public" or not s3_key.startswith("public/faq/"):
+        return _resp(403, {"error": "only public FAQ documents are editable"})
 
     s3_client.put_object(
         Bucket=WORKSPACE_BUCKET,
-        Key=key,
+        Key=s3_key,
         Body=content.encode("utf-8"),
-        ContentType="text/markdown; charset=utf-8",
+        ContentType=item.get("content_type") or "text/markdown; charset=utf-8",
     )
+
     status = "sync_started"
     ingestion_job_id = None
     try:
         job = bedrock_agent.start_ingestion_job(
             knowledgeBaseId=KB_ID,
             dataSourceId=DATA_SOURCE_ID,
-            description=f"FAQ save: {doc_id}",
+            description=f"FAQ save: {catalog_id}",
         )
         ingestion_job_id = job.get("ingestionJob", {}).get("ingestionJobId")
     except ClientError as exc:
@@ -193,31 +240,27 @@ def _save_doc(event, jwt):
         200,
         {
             "status": status,
-            "document_id": doc_id,
+            "document_id": catalog_id,
             "ingestion_job_id": ingestion_job_id,
         },
     )
 
 
-def lambda_handler(event, context):
-    if event.get("httpMethod") == "OPTIONS":
-        return _resp(200, {})
-
-    jwt = _jwt_from_event(event)
-    if (event.get("path") or "").endswith("/docs"):
-        return _save_doc(event, jwt)
-
-    body = json.loads(event.get("body") or "{}")
+def _handle_chat(event, jwt):
+    body = _request_body(event)
     message = (body.get("message") or "").strip()
     session_id = body.get("sessionId") or str(uuid.uuid4())
     if not message:
         return _resp(400, {"error": "message is required"})
 
-    raw_text, retrieved_ids = _invoke_agent(message, session_id)
-    inline_ids = _parse_inline_doc_ids(raw_text)
-    union_ids = list(dict.fromkeys(retrieved_ids + inline_ids))
+    raw_text, retrieved_ids, retrieved_chunks = _invoke_agent(message, session_id)
+    inline_ids = _parse_inline_catalog_ids(raw_text)
+    checked_inline_ids = _cross_check_inline_ids(inline_ids, retrieved_chunks)
+    catalog_ids = list(dict.fromkeys(retrieved_ids + checked_inline_ids))
 
-    links = _resolve_links(union_ids, jwt)
+    # Intentionally vulnerable: the source-link path trusts the checked model
+    # selection but does not request a final caller ACL check.
+    links = _resolve_links(catalog_ids, jwt, enforce_acl=False)
     rendered = _render(raw_text, links)
 
     return _resp(
@@ -227,8 +270,54 @@ def lambda_handler(event, context):
             "raw": raw_text,
             "rendered": rendered,
             "citations": [
-                {"document_id": doc_id, "url": links.get(doc_id)}
-                for doc_id in union_ids
+                {"document_id": catalog_id, "url": links.get(catalog_id)}
+                for catalog_id in catalog_ids
             ],
+            "validation": {
+                "inline_ids": inline_ids,
+                "accepted_inline_ids": checked_inline_ids,
+            },
         },
     )
+
+
+def _handle_files():
+    files = _invoke_source_link_issuer({"operation": "list"}).get("files", [])
+    return _resp(200, {"files": files})
+
+
+def _handle_download(event, jwt):
+    body = _request_body(event)
+    catalog_id = (body.get("document_id") or "").strip()
+    if not catalog_id:
+        return _resp(400, {"error": "document_id is required"})
+
+    links = _resolve_links([catalog_id], jwt, enforce_acl=True)
+    url = links.get(catalog_id)
+    if not url:
+        return _resp(
+            403,
+            {
+                "error": "forbidden",
+                "reason": "caller group does not satisfy file access policy",
+            },
+        )
+    return _resp(200, {"document_id": catalog_id, "url": url})
+
+
+def lambda_handler(event, context):
+    method = (event.get("httpMethod") or "POST").upper()
+    if method == "OPTIONS":
+        return _resp(200, {})
+
+    route = _route_name(event)
+    jwt = _jwt_from_event(event)
+    if route == "chat" and method == "POST":
+        return _handle_chat(event, jwt)
+    if route == "docs" and method == "POST":
+        return _save_doc(event, jwt)
+    if route == "files" and method == "GET":
+        return _handle_files()
+    if route == "download" and method == "POST":
+        return _handle_download(event, jwt)
+    return _resp(404, {"error": "route not found"})

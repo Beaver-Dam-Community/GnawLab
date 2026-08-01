@@ -101,7 +101,7 @@ You should see ~110 resources being created, including:
   `kb_ingestion_trigger`, `cognito_pre_signup`, `cognito_post_confirmation`)
 - 1 S3 workspace bucket + 1 DynamoDB `document_catalog` table
 - 1 KMS CMK
-- 1 API Gateway REST API (`/api/chat`, `/api/docs`)
+- 1 API Gateway REST API (`/api/chat`, `/api/docs`, `/api/files`, `/api/download`)
 - 1 CloudFront distribution + WAFv2 web ACL
 - 1 S3 web hosting bucket (BPO console SPA + FitMall storefront)
 

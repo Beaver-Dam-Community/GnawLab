@@ -44,11 +44,12 @@ resource "aws_s3_object" "console_config" {
       bpoDomain: "${var.bpo_email_domain}",
       sellerDomain: "${var.seller_email_domain}",
       customerExportDocId: "${local.customer_export_doc_id}",
+      catalogIds: ${jsonencode(local.catalog_ids)},
       seedDocs: {
-        "faq/refund-policy-v3":   ${jsonencode(file("${path.module}/../assets/kb_seed/refund-policy-v3.md"))},
-        "faq/exchange-policy-v2": ${jsonencode(file("${path.module}/../assets/kb_seed/exchange-policy-v2.md"))},
-        "faq/shipping":           ${jsonencode(file("${path.module}/../assets/kb_seed/shipping-faq.md"))},
-        "manual/size-guide":      ${jsonencode(file("${path.module}/../assets/kb_seed/size-guide.md"))}
+        "${local.catalog_ids.refund}":     ${jsonencode(file("${path.module}/../assets/kb_seed/refund-policy-v3.md"))},
+        "${local.catalog_ids.exchange}":   ${jsonencode(file("${path.module}/../assets/kb_seed/exchange-policy-v2.md"))},
+        "${local.catalog_ids.shipping}":   ${jsonencode(file("${path.module}/../assets/kb_seed/shipping-faq.md"))},
+        "${local.catalog_ids.size_guide}": ${jsonencode(file("${path.module}/../assets/kb_seed/size-guide.md"))}
       }
     };
   EOT

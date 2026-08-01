@@ -2,7 +2,7 @@
  *
  * Single-file SPA. Login through Cognito User Pool, then route between
  * a small set of operator screens: FAQ Editor, Customer Segments, and
- * Chat QA / Preview. Chat uses `/api/chat`, FAQ saves use `/api/docs`.
+ * Chat QA / Preview. All screens use authenticated `/api/*` routes.
  *
  * The configuration object (window.TOKTOK_CONFIG) is injected by
  * config.js which is uploaded by terraform.
@@ -133,6 +133,26 @@
     return data;
   }
 
+  async function apiRequest(path, method, idToken, body) {
+    const r = await fetch(cfg.chatApiBase + path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: idToken,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const payload = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(payload.reason || payload.error || (path + " " + r.status));
+    }
+    return payload;
+  }
+
+  const apiFiles = (idToken) => apiRequest("/files", "GET", idToken);
+  const apiDownload = (documentId, idToken) =>
+    apiRequest("/download", "POST", idToken, { document_id: documentId });
+
   // -----------------------------------------------------------------
   // Local state
   // -----------------------------------------------------------------
@@ -142,19 +162,19 @@
     route: "qa",
     docs: [
       {
-        id: "faq/refund-policy-v3",
+        id: cfg.catalogIds?.refund || "cat_4b17e2",
         title: "Refund Policy v3.0",
-        body: cfg.seedDocs?.["faq/refund-policy-v3"] || "",
+        body: cfg.seedDocs?.[cfg.catalogIds?.refund || "cat_4b17e2"] || "",
       },
       {
-        id: "faq/exchange-policy-v2",
+        id: cfg.catalogIds?.exchange || "cat_6f01d8",
         title: "Exchange Policy v2.0",
-        body: cfg.seedDocs?.["faq/exchange-policy-v2"] || "",
+        body: cfg.seedDocs?.[cfg.catalogIds?.exchange || "cat_6f01d8"] || "",
       },
       {
-        id: "faq/shipping",
+        id: cfg.catalogIds?.shipping || "cat_2ad774",
         title: "Shipping FAQ",
-        body: cfg.seedDocs?.["faq/shipping"] || "",
+        body: cfg.seedDocs?.[cfg.catalogIds?.shipping || "cat_2ad774"] || "",
       },
     ],
     activeDocIndex: 0,
@@ -162,6 +182,8 @@
     chat: [],     // list of {role, raw, rendered, citations}
     debugTab: "raw",
     busy: false,
+    files: null,
+    filesLoading: false,
   };
 
   // -----------------------------------------------------------------
@@ -498,32 +520,47 @@
 
     const isAdmin = (state.profile.groups || []).includes("seller_admin");
 
-    const segments = [
+    if (!state.files && !state.filesLoading) {
+      state.filesLoading = true;
+      apiFiles(state.idToken)
+        .then((payload) => {
+          state.files = payload.files || [];
+          state.filesLoading = false;
+          if (state.route === "segments") render();
+        })
+        .catch((e) => {
+          state.filesLoading = false;
+          toast(String((e && e.message) || e), "error");
+        });
+    }
+
+    const segments = (state.files || [
       {
         title: "VIP customer export 2026-04",
-        docId: cfg.customerExportDocId || "customer-export/fitmall/2026-04",
-        rows: 50,
-        size: "12.4 KB",
-        updated: "2026-04-30",
+        document_id: cfg.customerExportDocId || "cat_9c2a41",
+        required_role: "seller_admin",
+        row_count: "50",
+        display_size: "12.4 KB",
+        created_at: "2026-04-30",
       },
-    ];
+    ]).filter((file) => file.required_role !== "public");
 
     host.innerHTML = `
       <div class="segments-grid">
-        ${segments.map((s) => `
+        ${segments.map((segment) => `
           <div class="segment-card">
-            <h4>${s.title}</h4>
-            <div class="doc-id">${s.docId}</div>
+            <h4>${segment.title}</h4>
+            <div class="doc-id">${segment.document_id}</div>
             <div style="color:var(--text-dim); font-size:12px;">
-              ${s.rows} rows, ${s.size}, updated ${s.updated}
+              ${segment.row_count || "-"} rows, ${segment.display_size || "-"}, created ${segment.created_at || "-"}
             </div>
             <div class="row" style="margin-top:auto;">
               <span class="tag ${isAdmin ? "ok" : "deny"}">
-                ${isAdmin ? "Download enabled" : "seller_admin only"}
+                ${isAdmin ? "Download enabled" : "seller_admin required"}
               </span>
               <button class="btn ${isAdmin ? "btn-secondary" : "btn-danger"}"
-                ${isAdmin ? "" : "disabled"}>
-                Download CSV
+                data-download="${segment.document_id}">
+                ${isAdmin ? "Download CSV" : "Try direct download"}
               </button>
             </div>
           </div>
@@ -544,6 +581,16 @@
         e.preventDefault();
         state.route = el.dataset.jump;
         render();
+      })
+    );
+    host.querySelectorAll("[data-download]").forEach((el) =>
+      el.addEventListener("click", async () => {
+        try {
+          const payload = await apiDownload(el.dataset.download, state.idToken);
+          window.open(payload.url, "_blank", "noopener");
+        } catch (e) {
+          toast(String((e && e.message) || e), "error");
+        }
       })
     );
   }

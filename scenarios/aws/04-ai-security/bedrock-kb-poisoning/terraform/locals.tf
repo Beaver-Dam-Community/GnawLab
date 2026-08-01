@@ -33,8 +33,26 @@ locals {
   # underlying service caps the total at 32 (OpenSearch Serverless).
   oss_collection = "${local.scenario_name}-kb-${local.scenario_id}"
 
-  # KB document IDs / S3 keys for the protected April 2026 customer export.
-  customer_export_doc_id = "customer-export/fitmall/2026-04"
+  # Opaque catalog IDs are exposed to the UI and model. S3 keys stay internal.
+  catalog_ids = {
+    refund          = "cat_4b17e2"
+    exchange        = "cat_6f01d8"
+    shipping        = "cat_2ad774"
+    size_guide      = "cat_73e0bf"
+    customer_export = "cat_9c2a41"
+  }
+
+  # Bedrock attribution returns S3 URIs. The chat backend converts only known
+  # public Knowledge Base objects back to their opaque catalog IDs.
+  s3_key_to_catalog_id = {
+    "public/faq/refund-policy-v3.md"   = local.catalog_ids.refund
+    "public/faq/exchange-policy-v2.md" = local.catalog_ids.exchange
+    "public/faq/shipping.md"           = local.catalog_ids.shipping
+    "public/manual/size-guide.md"      = local.catalog_ids.size_guide
+  }
+
+  # Catalog ID / S3 key for the protected April 2026 customer export.
+  customer_export_doc_id = local.catalog_ids.customer_export
   customer_export_s3_key = "admin-only/customers/customer-export-2026-04.csv"
 
   # Cognito group names. Must match the JWT `cognito:groups` claim values

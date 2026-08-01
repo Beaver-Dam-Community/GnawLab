@@ -101,7 +101,7 @@ resource "aws_iam_role_policy" "source_link_issuer_inline" {
       {
         Sid      = "CatalogLookup"
         Effect   = "Allow"
-        Action   = ["dynamodb:GetItem"]
+        Action   = ["dynamodb:GetItem", "dynamodb:Scan"]
         Resource = aws_dynamodb_table.document_catalog.arn
       },
     ]

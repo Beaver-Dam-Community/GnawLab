@@ -189,6 +189,103 @@ resource "aws_api_gateway_integration_response" "docs_options" {
   }
 }
 
+# Catalog metadata and normal direct-download endpoints. Both share the same
+# Cognito authorizer and backend Lambda; authorization differs inside the
+# backend because /api/download explicitly requests a final caller ACL check.
+locals {
+  additional_api_routes = {
+    files = {
+      method = "GET"
+    }
+    download = {
+      method = "POST"
+    }
+  }
+}
+
+resource "aws_api_gateway_resource" "additional_api" {
+  for_each = local.additional_api_routes
+
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.api.id
+  path_part   = each.key
+}
+
+resource "aws_api_gateway_method" "additional_api" {
+  for_each = local.additional_api_routes
+
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.additional_api[each.key].id
+  http_method   = each.value.method
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
+}
+
+resource "aws_api_gateway_integration" "additional_api" {
+  for_each = local.additional_api_routes
+
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.additional_api[each.key].id
+  http_method             = aws_api_gateway_method.additional_api[each.key].http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.chat_backend.invoke_arn
+}
+
+resource "aws_api_gateway_method" "additional_api_options" {
+  for_each = local.additional_api_routes
+
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.additional_api[each.key].id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "additional_api_options" {
+  for_each = local.additional_api_routes
+
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.additional_api[each.key].id
+  http_method = aws_api_gateway_method.additional_api_options[each.key].http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "additional_api_options" {
+  for_each = local.additional_api_routes
+
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.additional_api[each.key].id
+  http_method = aws_api_gateway_method.additional_api_options[each.key].http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "additional_api_options" {
+  for_each = local.additional_api_routes
+
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.additional_api[each.key].id
+  http_method = aws_api_gateway_method.additional_api_options[each.key].http_method
+  status_code = aws_api_gateway_method_response.additional_api_options[each.key].status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization'"
+    "method.response.header.Access-Control-Allow-Methods" = "'OPTIONS,GET,POST'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+
+  depends_on = [aws_api_gateway_integration.additional_api_options]
+}
+
 resource "aws_lambda_permission" "chat_backend_apigw" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
@@ -213,6 +310,11 @@ resource "aws_api_gateway_deployment" "main" {
       aws_api_gateway_integration.docs_post,
       aws_api_gateway_method.docs_options,
       aws_api_gateway_integration.docs_options,
+      values(aws_api_gateway_resource.additional_api)[*].id,
+      values(aws_api_gateway_method.additional_api)[*].id,
+      values(aws_api_gateway_integration.additional_api)[*].id,
+      values(aws_api_gateway_method.additional_api_options)[*].id,
+      values(aws_api_gateway_integration.additional_api_options)[*].id,
     ]))
   }
 
@@ -227,6 +329,9 @@ resource "aws_api_gateway_deployment" "main" {
     aws_api_gateway_integration.docs_post,
     aws_api_gateway_integration.docs_options,
     aws_api_gateway_integration_response.docs_options,
+    aws_api_gateway_integration.additional_api,
+    aws_api_gateway_integration.additional_api_options,
+    aws_api_gateway_integration_response.additional_api_options,
   ]
 }
 

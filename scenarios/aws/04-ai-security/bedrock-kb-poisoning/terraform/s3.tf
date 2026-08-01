@@ -99,11 +99,8 @@ resource "aws_s3_object" "seed_faq_exchange" {
 
 resource "aws_s3_object" "seed_faq_shipping" {
   bucket = aws_s3_bucket.workspace.id
-  # The KB-side document_id is derived from the S3 key by chat_backend
-  # (strip "public/" prefix and ".md" suffix). To keep that derivation
-  # aligned with the document_catalog logical IDs ("faq/shipping",
-  # "manual/size-guide"), the upload keys mirror the catalog IDs even
-  # when the source filename in assets/kb_seed differs.
+  # The source filename differs from the deployed S3 key. chat_backend maps
+  # this known S3 key to an opaque catalog ID before it reaches the UI.
   key    = "public/faq/shipping.md"
   source = "${path.module}/../assets/kb_seed/shipping-faq.md"
   etag   = filemd5("${path.module}/../assets/kb_seed/shipping-faq.md")
