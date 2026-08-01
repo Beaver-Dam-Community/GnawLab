@@ -49,6 +49,11 @@ resource "aws_bedrockagent_data_source" "public_prefix" {
   }
 
   data_deletion_policy = "DELETE"
+
+  # Bedrock must remove the indexed chunks before the versioned source bucket
+  # is purged. Without this edge, both destroy operations can run in parallel
+  # and the data source can become DELETE_UNSUCCESSFUL.
+  depends_on = [null_resource.predestroy_workspace_bucket]
 }
 
 # Guardrail. PROMPT_ATTACK on user inputs only (Bedrock-documented behaviour -
@@ -154,7 +159,7 @@ resource "aws_bedrockagent_agent_alias" "prod" {
 resource "null_resource" "predestroy_kb_jobs" {
   triggers = {
     kb_id  = aws_bedrockagent_knowledge_base.main.id
-    ds_id  = aws_bedrockagent_data_source.public_prefix.id
+    ds_id  = aws_bedrockagent_data_source.public_prefix.data_source_id
     region = data.aws_region.current.region
   }
 

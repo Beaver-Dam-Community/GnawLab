@@ -55,6 +55,19 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("literally appears in a FAQ chunk", walkthrough)
         self.assertIn("without asking it to enforce the final user's ACL", walkthrough)
 
+    def test_destroy_hooks_use_real_data_source_id_and_preserve_order(self):
+        path = ROOT / "terraform/bedrock.tf"
+        bedrock = path.read_text(encoding="utf-8")
+        self.assertIn(
+            "ds_id  = aws_bedrockagent_data_source.public_prefix.data_source_id",
+            bedrock,
+        )
+        self.assertIn(
+            "depends_on = [null_resource.predestroy_workspace_bucket]",
+            bedrock,
+        )
+        self.assertNotIn(b"\r\n", path.read_bytes())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
