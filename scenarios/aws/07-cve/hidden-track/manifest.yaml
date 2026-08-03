@@ -1,0 +1,7 @@
+- name: hidden-track
+- author: Hyung Eun Son
+- version: 1.0
+- help: |
+    Exploit CVE-2021-22204 (ExifTool RCE) via a music distribution portal upload pipeline,
+    extract Lambda IAM credentials, then recover a deleted S3 object using S3 Versioning.
+- last-updated: 05-18-2026

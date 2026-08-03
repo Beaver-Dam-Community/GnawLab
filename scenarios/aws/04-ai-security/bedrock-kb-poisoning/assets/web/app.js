@@ -1,8 +1,8 @@
 /* TokTok-Support workspace console.
  *
  * Single-file SPA. Login through Cognito User Pool, then route between
- * a small set of operator screens — FAQ Editor, Customer Segments, and
- * Chat QA / Preview — that all share the same `/api/chat` backend.
+ * a small set of operator screens: FAQ Editor, Customer Segments, and
+ * Chat QA / Preview. All screens use authenticated `/api/*` routes.
  *
  * The configuration object (window.TOKTOK_CONFIG) is injected by
  * config.js which is uploaded by terraform.
@@ -13,6 +13,7 @@
 
   const cfg = window.TOKTOK_CONFIG || {};
   const $ = (sel, root) => (root || document).querySelector(sel);
+  let pendingPasswordUser = null;
 
   // -----------------------------------------------------------------
   // Cognito User Pool helper
@@ -50,7 +51,16 @@
       cu.authenticateUser(auth, {
         onSuccess: (session) => resolve({ user: cu, session }),
         onFailure: (err) => reject(err),
-        newPasswordRequired: () => reject(new Error("New password required.")),
+        newPasswordRequired: () => resolve({ user: cu, newPasswordRequired: true }),
+      });
+    });
+  }
+
+  function completeNewPassword(user, password) {
+    return new Promise((resolve, reject) => {
+      user.completeNewPasswordChallenge(password, {}, {
+        onSuccess: (session) => resolve({ user, session }),
+        onFailure: (err) => reject(err),
       });
     });
   }
@@ -109,6 +119,40 @@
     return r.json();
   }
 
+  async function apiSaveDoc(documentId, content, idToken) {
+    const r = await fetch(cfg.chatApiBase + "/docs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: idToken,
+      },
+      body: JSON.stringify({ document_id: documentId, content }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || "save failed");
+    return data;
+  }
+
+  async function apiRequest(path, method, idToken, body) {
+    const r = await fetch(cfg.chatApiBase + path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: idToken,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const payload = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(payload.reason || payload.error || (path + " " + r.status));
+    }
+    return payload;
+  }
+
+  const apiFiles = (idToken) => apiRequest("/files", "GET", idToken);
+  const apiDownload = (documentId, idToken) =>
+    apiRequest("/download", "POST", idToken, { document_id: documentId });
+
   // -----------------------------------------------------------------
   // Local state
   // -----------------------------------------------------------------
@@ -118,24 +162,19 @@
     route: "qa",
     docs: [
       {
-        id: "faq/refund-policy-v3",
+        id: cfg.catalogIds?.refund || "cat_4b17e2",
         title: "Refund Policy v3.0",
-        body: cfg.seedDocs?.["faq/refund-policy-v3"] || "",
+        body: cfg.seedDocs?.[cfg.catalogIds?.refund || "cat_4b17e2"] || "",
       },
       {
-        id: "faq/exchange-policy-v2",
+        id: cfg.catalogIds?.exchange || "cat_6f01d8",
         title: "Exchange Policy v2.0",
-        body: cfg.seedDocs?.["faq/exchange-policy-v2"] || "",
+        body: cfg.seedDocs?.[cfg.catalogIds?.exchange || "cat_6f01d8"] || "",
       },
       {
-        id: "faq/shipping",
+        id: cfg.catalogIds?.shipping || "cat_2ad774",
         title: "Shipping FAQ",
-        body: cfg.seedDocs?.["faq/shipping"] || "",
-      },
-      {
-        id: "manual/size-guide",
-        title: "Size Guide",
-        body: cfg.seedDocs?.["manual/size-guide"] || "",
+        body: cfg.seedDocs?.[cfg.catalogIds?.shipping || "cat_2ad774"] || "",
       },
     ],
     activeDocIndex: 0,
@@ -143,6 +182,8 @@
     chat: [],     // list of {role, raw, rendered, citations}
     debugTab: "raw",
     busy: false,
+    files: null,
+    filesLoading: false,
   };
 
   // -----------------------------------------------------------------
@@ -174,6 +215,14 @@
             <button type="submit" class="btn btn-primary">Sign in</button>
             <div id="login-error" class="error"></div>
           </form>
+          <form id="new-password-form" style="display:none;">
+            <div class="field">
+              <label for="new-password">Set a new password</label>
+              <input id="new-password" type="password" autocomplete="new-password" minlength="8" required />
+            </div>
+            <button type="submit" class="btn btn-primary">Continue</button>
+            <div id="new-password-error" class="error"></div>
+          </form>
           <div class="hint">
             Trouble logging in? Check the Terraform output for seeded
             credentials, or contact your seller workspace owner.
@@ -187,12 +236,32 @@
       const password = $("#password").value;
       $("#login-error").textContent = "";
       try {
-        const { session } = await login(email, password);
+        const result = await login(email, password);
+        if (result.newPasswordRequired) {
+          pendingPasswordUser = result.user;
+          $("#login-form").style.display = "none";
+          $("#new-password-form").style.display = "block";
+          return;
+        }
+        const { session } = result;
         state.profile = getProfile(session);
         state.idToken = getIdToken(session);
         render();
       } catch (e) {
         $("#login-error").textContent = (e && e.message) || "Sign-in failed.";
+      }
+    });
+    $("#new-password-form").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      $("#new-password-error").textContent = "";
+      try {
+        const { session } = await completeNewPassword(pendingPasswordUser, $("#new-password").value);
+        pendingPasswordUser = null;
+        state.profile = getProfile(session);
+        state.idToken = getIdToken(session);
+        render();
+      } catch (e) {
+        $("#new-password-error").textContent = (e && e.message) || "Password update failed.";
       }
     });
   }
@@ -211,21 +280,21 @@
             <div class="brand-mark">T</div>
             <div>
               <div class="brand-name">TokTok-Support</div>
-              <div class="workspace-pill">Workspace · <b>FitMall</b></div>
+              <div class="workspace-pill">Workspace <b>FitMall</b></div>
             </div>
           </div>
           <div class="nav-group">Operations</div>
           <div class="nav-item ${state.route === "qa" ? "active" : ""}" data-route="qa">
-            <span class="nav-icon">◈</span> Chat QA / Preview
+            <span class="nav-icon">QA</span> Chat QA / Preview
           </div>
           <div class="nav-item ${state.route === "faq" ? "active" : ""}" data-route="faq">
-            <span class="nav-icon">✎</span> FAQ Editor
+            <span class="nav-icon">FAQ</span> FAQ Editor
           </div>
           <div class="nav-item ${state.route === "segments" ? "active" : ""}" data-route="segments">
-            <span class="nav-icon">◰</span> Customer Segments
+            <span class="nav-icon">CSV</span> Customer Segments
           </div>
           <div class="nav-item ${state.route === "settings" ? "active" : ""}" data-route="settings">
-            <span class="nav-icon">⚙</span> Workspace Settings
+            <span class="nav-icon">SET</span> Workspace Settings
           </div>
           <div class="sidebar-foot">
             <div class="user-dot">${(state.profile.email || "?")[0].toUpperCase()}</div>
@@ -421,14 +490,19 @@
         renderRoute();
       });
     });
-    $("#save-doc").addEventListener("click", () => {
+    $("#save-doc").addEventListener("click", async () => {
       const body = $("#doc-body").value;
-      docs[state.activeDocIndex].body = body;
-      // The real implementation would PUT to a /api/docs/<id> endpoint that
-      // uploads to S3 public/faq/. For the lab we surface a toast so the
-      // operator knows the change exists locally; the seeded copy in S3 is
-      // the source of truth that the KB syncs from.
-      toast("Saved (local). Production would PUT to /api/docs and trigger KB ingestion.", "ok");
+      const button = $("#save-doc");
+      button.disabled = true;
+      try {
+        const result = await apiSaveDoc(active.id, body, state.idToken);
+        docs[state.activeDocIndex].body = body;
+        toast("Saved, KB sync started" + (result.ingestion_job_id ? ": " + result.ingestion_job_id : ""), "ok");
+      } catch (e) {
+        toast("Save failed: " + ((e && e.message) || e), "error");
+      } finally {
+        button.disabled = false;
+      }
     });
     $("#revert-doc").addEventListener("click", () => {
       state.docs[state.activeDocIndex].body =
@@ -446,32 +520,47 @@
 
     const isAdmin = (state.profile.groups || []).includes("seller_admin");
 
-    const segments = [
+    if (!state.files && !state.filesLoading) {
+      state.filesLoading = true;
+      apiFiles(state.idToken)
+        .then((payload) => {
+          state.files = payload.files || [];
+          state.filesLoading = false;
+          if (state.route === "segments") render();
+        })
+        .catch((e) => {
+          state.filesLoading = false;
+          toast(String((e && e.message) || e), "error");
+        });
+    }
+
+    const segments = (state.files || [
       {
-        title: "VIP customer export · 2026-04",
-        docId: cfg.customerExportDocId || "customer-export/fitmall/2026-04",
-        rows: 50,
-        size: "12.4 KB",
-        updated: "2026-04-30",
+        title: "VIP customer export 2026-04",
+        document_id: cfg.customerExportDocId || "cat_9c2a41",
+        required_role: "seller_admin",
+        row_count: "50",
+        display_size: "12.4 KB",
+        created_at: "2026-04-30",
       },
-    ];
+    ]).filter((file) => file.required_role !== "public");
 
     host.innerHTML = `
       <div class="segments-grid">
-        ${segments.map((s) => `
+        ${segments.map((segment) => `
           <div class="segment-card">
-            <h4>${s.title}</h4>
-            <div class="doc-id">${s.docId}</div>
+            <h4>${segment.title}</h4>
+            <div class="doc-id">${segment.document_id}</div>
             <div style="color:var(--text-dim); font-size:12px;">
-              ${s.rows} rows · ${s.size} · updated ${s.updated}
+              ${segment.row_count || "-"} rows, ${segment.display_size || "-"}, created ${segment.created_at || "-"}
             </div>
             <div class="row" style="margin-top:auto;">
               <span class="tag ${isAdmin ? "ok" : "deny"}">
-                ${isAdmin ? "Download enabled" : "seller_admin only"}
+                ${isAdmin ? "Download enabled" : "seller_admin required"}
               </span>
               <button class="btn ${isAdmin ? "btn-secondary" : "btn-danger"}"
-                ${isAdmin ? "" : "disabled"}>
-                Download CSV
+                data-download="${segment.document_id}">
+                ${isAdmin ? "Download CSV" : "Try direct download"}
               </button>
             </div>
           </div>
@@ -494,6 +583,16 @@
         render();
       })
     );
+    host.querySelectorAll("[data-download]").forEach((el) =>
+      el.addEventListener("click", async () => {
+        try {
+          const payload = await apiDownload(el.dataset.download, state.idToken);
+          window.open(payload.url, "_blank", "noopener");
+        } catch (e) {
+          toast(String((e && e.message) || e), "error");
+        }
+      })
+    );
   }
 
   function renderSettings(host) {
@@ -502,7 +601,7 @@
     host.innerHTML = `
       <div class="card">
         <h3>About this workspace</h3>
-        <p>FitMall · activewear (cgid <code>${cfg.cgid || "-"}</code>)</p>
+        <p>FitMall activewear (cgid <code>${cfg.cgid || "-"}</code>)</p>
       </div>
       <div class="card">
         <h3>Retention</h3>
@@ -511,7 +610,7 @@
       </div>
       <div class="card">
         <h3>BPO partners</h3>
-        <p>Trusted email domain: <code>${cfg.bpoDomain || "(unset)"}</code> ·
+        <p>Trusted email domain: <code>${cfg.bpoDomain || "(unset)"}</code>,
            accounts on this domain auto-confirm and join the
            <span class="tag">bpo_editor</span> group on signup.</p>
       </div>

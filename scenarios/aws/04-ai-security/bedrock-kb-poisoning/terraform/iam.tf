@@ -45,6 +45,27 @@ resource "aws_iam_role_policy" "chat_backend_inline" {
         Action   = ["lambda:InvokeFunction"]
         Resource = aws_lambda_function.source_link_issuer.arn
       },
+      {
+        Sid      = "WritePublicFaqDocs"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "${aws_s3_bucket.workspace.arn}/public/faq/*"
+      },
+      {
+        Sid      = "CatalogLookup"
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem"]
+        Resource = aws_dynamodb_table.document_catalog.arn
+      },
+      {
+        Sid    = "StartIngestionJob"
+        Effect = "Allow"
+        Action = ["bedrock:StartIngestionJob"]
+        Resource = [
+          aws_bedrockagent_knowledge_base.main.arn,
+          "${aws_bedrockagent_knowledge_base.main.arn}/data-source/*",
+        ]
+      },
     ]
   })
 }
@@ -69,9 +90,9 @@ resource "aws_iam_role_policy" "source_link_issuer_inline" {
     Version = "2012-10-17"
     Statement = [
       {
-        # Integrated link issuer for both public and seller_admin docs ->
-        # bucket-wide GetObject is the design (the security boundary is
-        # in source_link_issuer code, currently missing).
+        # The link issuer serves both public FAQ docs and seller_admin exports,
+        # so the role reads the whole workspace bucket. Per-document access is
+        # handled in the application layer.
         Sid      = "WorkspaceGetObject"
         Effect   = "Allow"
         Action   = ["s3:GetObject"]
@@ -80,7 +101,7 @@ resource "aws_iam_role_policy" "source_link_issuer_inline" {
       {
         Sid      = "CatalogLookup"
         Effect   = "Allow"
-        Action   = ["dynamodb:GetItem"]
+        Action   = ["dynamodb:GetItem", "dynamodb:Scan"]
         Resource = aws_dynamodb_table.document_catalog.arn
       },
     ]
@@ -190,8 +211,20 @@ resource "aws_iam_role_policy" "bedrock_agent_inline" {
       {
         Sid      = "InvokeFoundationModel"
         Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel"]
-        Resource = "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${var.agent_model_id}"
+        Action   = ["bedrock:InvokeModel*"]
+        Resource = local.agent_model_resource_arns
+      },
+      {
+        Sid    = "ReadInferenceProfile"
+        Effect = "Allow"
+        Action = [
+          "bedrock:GetInferenceProfile",
+          "bedrock:ListInferenceProfiles",
+        ]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+          "arn:${data.aws_partition.current.partition}:bedrock:*:${data.aws_caller_identity.current.account_id}:application-inference-profile/*",
+        ]
       },
       {
         Sid    = "RetrieveKB"

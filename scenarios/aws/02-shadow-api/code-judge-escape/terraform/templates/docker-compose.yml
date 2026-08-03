@@ -1,0 +1,19 @@
+# VulnBoard runtime composition.
+#
+# The /var/run/docker.sock bind mount is required so the grading service can
+# spawn ephemeral python:3.11-slim containers per submission. The Slack
+# discussion at the 2024-Q3 DevOps sync flagged this pattern, but the
+# alternative (running dind inside the app container) was rejected as
+# operationally heavier. Re-evaluate when SECURITY-142 lands.
+version: "3.8"
+
+services:
+  vulnboard:
+    image: vulnboard:latest
+    container_name: vulnboard
+    restart: unless-stopped
+    ports:
+      - "8080:5000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/vulnboard/docker-compose.yml:/srv/docker-compose.yml:ro
