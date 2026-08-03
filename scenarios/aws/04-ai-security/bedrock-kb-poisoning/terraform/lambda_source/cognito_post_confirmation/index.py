@@ -1,7 +1,7 @@
 """Cognito Post-Confirmation hook.
 
 Auto-attaches new users to a Cognito group based on their email domain.
-This implements the seller's "BPO partner self-onboarding" feature — once
+This implements the seller's "BPO partner self-onboarding" feature. Once
 an account is confirmed (which the pre-signup hook already auto-does for
 trusted domains), this hook puts BPO emails into bpo_editor and seller
 staff into seller_admin so they can immediately use the workspace.
