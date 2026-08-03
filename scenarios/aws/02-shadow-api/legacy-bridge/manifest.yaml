@@ -2,5 +2,5 @@
 - author: Hyung Eun Son
 - version: 1.0
 - help: |
-    Exploit an undocumented v1 backend to perform IDOR → SSRF → IMDSv1 credential theft → S3 data exfiltration attacks.
+    Exploit an undocumented v1 backend via SSRF to perform IMDSv1 credential theft and S3 data exfiltration.
 - last-updated: 04-30-2026
