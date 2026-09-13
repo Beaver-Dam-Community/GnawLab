@@ -4,6 +4,12 @@ variable "region" {
   default     = "us-east-1"
 }
 
+variable "profile" {
+  description = "AWS CLI profile to use for deployment"
+  type        = string
+  default     = "GnawLab"
+}
+
 variable "scenario_name" {
   description = "Scenario identifier - used as a prefix for tagging/naming"
   type        = string

@@ -123,8 +123,8 @@ Create `terraform.tfvars` for custom settings:
 # Optional: Specify IP manually (auto-detected by default)
 whitelist_ip = "YOUR.PUBLIC.IP/32"
 
-# Optional: Use different AWS profile for deployment
-profile = "my-admin-profile"
+# Optional: Override the AWS CLI profile for deployment (default: GnawLab)
+profile = "GnawLab"
 
 # Optional: Custom flag value
 flag_value = "FLAG{custom_flag_here}"
